@@ -531,7 +531,23 @@ def process_record(sno, clean_title, doi_raw, retry_count=0):
     notes = []
     fetch_errors = []
     doi = normalize_doi(doi_raw)
-    clean_title = str(clean_title).strip() if clean_title is not None else ""
+
+    # FIX: a blank Excel cell comes through as pandas' float NaN, and
+    # `str(float('nan'))` is the literal 3-character string "nan" - which is
+    # truthy and looks like real title text. Without this guard, a record
+    # with no title at all would get searched for the literal word "nan"
+    # and silently auto-matched (100% confidence) to any real paper whose
+    # title happens to contain "nan" (e.g. a false match onto "Nan Goldin"
+    # was observed in testing) instead of being correctly flagged as having
+    # no usable title. normalize_doi() already had this exact guard for the
+    # DOI side (see text_utils.normalize_doi's `d.lower() == "nan"` check);
+    # this brings the title side in line with it.
+    is_blank_title = (
+        clean_title is None
+        or (isinstance(clean_title, float) and clean_title != clean_title)  # NaN
+        or str(clean_title).strip().lower() in ("", "nan", "none")
+    )
+    clean_title = "" if is_blank_title else str(clean_title).strip()
 
     oa_parsed, pm_parsed, cr_parsed = {}, {}, {}
     matched_by = None

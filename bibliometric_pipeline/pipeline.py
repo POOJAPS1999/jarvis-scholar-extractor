@@ -169,7 +169,7 @@ def run_pipeline(df_in, checkpoint_path, output_path=None, progress_callback=Non
         try:
             row, matched_by, match_status, incomplete = process_record(sno, title, doi, retry_count=prior_retries)
         except Exception as e:
-            row = build_row(sno, str(title) if title is not None else "",
+            row = build_row(sno, "" if pd.isna(title) else str(title),
                              "" if pd.isna(doi) else str(doi),
                              {}, {}, {}, [f"ERROR: {e}"],
                              match_status="Error", match_score=0, match_source="",
@@ -270,7 +270,7 @@ def run():
             row, matched_by, match_status, incomplete = process_record(sno, title, doi, retry_count=prior_retries)
         except Exception as e:  # never let one record kill the run
             sys.stderr.write(f"[row {sno}] unexpected error: {e}\n")
-            row = build_row(sno, str(title) if title is not None else "",
+            row = build_row(sno, "" if pd.isna(title) else str(title),
                              "" if pd.isna(doi) else str(doi),
                              {}, {}, {}, [f"ERROR: {e}"],
                              match_status="Error", match_score=0, match_source="",
