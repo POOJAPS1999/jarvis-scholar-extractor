@@ -76,6 +76,10 @@ os.environ.setdefault("BIBLIO_CONTACT_EMAIL", "poojaps1999@gmail.com")
 from bibliometric_pipeline import config
 from bibliometric_pipeline.pipeline import run_pipeline, load_checkpoint, save_results, write_final
 from export_scopus_csv import convert_row, SCOPUS_COLUMNS, PROVENANCE_COLUMNS
+# Shared with the Phase 1 FastAPI backend (backend/review_logic.py) - this
+# is the single implementation of what Accept/Reject/Retry actually do to
+# a checkpoint, so Phase 0 and Phase 1 can never drift apart on this logic.
+from backend.review_logic import apply_review_decisions
 
 JOBS_DIR = Path(__file__).parent / "jobs"
 JOBS_DIR.mkdir(exist_ok=True)
@@ -106,44 +110,6 @@ with st.sidebar:
 def job_id_for(file_bytes: bytes, n_rows: int) -> str:
     h = hashlib.md5(file_bytes).hexdigest()[:12]
     return f"{h}_{n_rows}rows"
-
-
-def apply_review_decisions(ckpt_df: pd.DataFrame, edited_df: pd.DataFrame, overrides: dict):
-    """Pure logic for the manual-review step, kept separate from the widget
-    code so it's testable without spinning up Streamlit.
-
-    ckpt_df    - the full checkpoint DataFrame (all rows, any status)
-    edited_df  - the reviewer's edited subset, with 'Decision' and
-                 'Corrected DOI' columns added
-    overrides  - existing {sno: corrected_doi} dict to update in place
-
-    Returns (new_ckpt_df, overrides, counts_dict, warnings_list).
-    """
-    ckpt_df = ckpt_df.copy()
-    n_accept = n_reject = n_retry = 0
-    warnings = []
-    for _, r in edited_df.iterrows():
-        sno = str(r["Sno."])
-        decision = r["Decision"]
-        row_mask = ckpt_df["Sno."].astype(str) == sno
-        if decision == "Accept candidate":
-            ckpt_df.loc[row_mask, "Match Status"] = "Confirmed (manual review)"
-            n_accept += 1
-        elif decision == "Reject (exclude)":
-            ckpt_df.loc[row_mask, "Match Status"] = "Rejected (manual review)"
-            n_reject += 1
-        elif decision == "Retry with corrected DOI":
-            corrected = str(r.get("Corrected DOI") or "").strip()
-            if not corrected:
-                warnings.append(f"Sno {sno}: 'Retry with corrected DOI' needs a DOI - skipped.")
-                continue
-            overrides[sno] = corrected
-            # Drop it from the checkpoint entirely so run_pipeline's done-set
-            # no longer skips it on the next Run click.
-            ckpt_df = ckpt_df[~row_mask]
-            n_retry += 1
-    counts = {"accept": n_accept, "reject": n_reject, "retry": n_retry}
-    return ckpt_df, overrides, counts, warnings
 
 
 uploaded = st.file_uploader("Upload title/DOI list (.xlsx)", type=["xlsx"])

@@ -1,10 +1,16 @@
 # Secrets - never commit real credentials/API keys
 .env
 .env.scopus
+backend/.env
 
 # Streamlit job state (per-upload checkpoints/outputs) - local scratch,
 # and ephemeral anyway on Streamlit Community Cloud
 jobs/
+
+# Phase 1 backend local dev state - local scratch only, never durable
+# (production uses Postgres via DATABASE_URL + S3-compatible storage)
+backend/storage_data/
+*.db
 
 # Python
 __pycache__/
