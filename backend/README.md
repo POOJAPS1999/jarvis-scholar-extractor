@@ -13,7 +13,7 @@ around the exact same `bibliometric_pipeline.pipeline.run_pipeline()`,
 
 ```bash
 cd bibliometric_pipeline_project
-pip3 install -r requirements.txt -r backend/requirements.txt
+pip3 install -r requirements.txt   # backend deps are merged into this one file
 cp backend/.env.example backend/.env   # edit BIBLIO_CONTACT_EMAIL at minimum
 ```
 

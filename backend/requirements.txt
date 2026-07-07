@@ -1,6 +1,9 @@
-# Phase 1 backend additions - on top of the existing pipeline requirements
-# (pandas, openpyxl, requests, rapidfuzz, pycountry, python-dotenv), which
-# still apply since this backend calls straight into bibliometric_pipeline.
+# NOTE: these packages are now merged into the root requirements.txt
+# (../requirements.txt) too, because Railway's Python builder only installs
+# from a single requirements.txt at the repo root - see the comment there.
+# This file is kept as a reference for exactly which packages Phase 1 adds
+# on top of the base pipeline requirements; `pip3 install -r requirements.txt`
+# from the project root is now sufficient on its own for local dev too.
 fastapi
 uvicorn[standard]
 celery

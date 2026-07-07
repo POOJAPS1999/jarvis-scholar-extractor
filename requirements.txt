@@ -5,3 +5,18 @@ rapidfuzz
 pycountry
 python-dotenv
 streamlit
+
+# Phase 1 backend (FastAPI + Celery/Redis + Postgres) - merged in here
+# because Railway's default Python builder (Nixpacks) only installs from
+# a single requirements.txt at the repo root; keeping backend/requirements.txt
+# as a separate file (still present, for local-dev reference) would leave
+# these uninstalled on Railway and the web/worker services would crash on
+# import.
+fastapi
+uvicorn[standard]
+celery
+redis
+sqlmodel
+psycopg2-binary
+boto3
+python-multipart
