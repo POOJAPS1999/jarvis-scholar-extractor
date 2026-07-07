@@ -1,0 +1,7 @@
+pandas
+openpyxl
+requests
+rapidfuzz
+pycountry
+python-dotenv
+streamlit

@@ -1,0 +1,17 @@
+# Secrets - never commit real credentials/API keys
+.env
+.env.scopus
+
+# Streamlit job state (per-upload checkpoints/outputs) - local scratch,
+# and ephemeral anyway on Streamlit Community Cloud
+jobs/
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+
+# Large raw dumps / generated outputs not meant to be version-controlled
+scopus_raw_dumps/
