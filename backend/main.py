@@ -34,7 +34,7 @@ from typing import List, Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
@@ -73,7 +73,7 @@ def _job_to_dict(job: Job) -> dict:
 
 
 @app.post("/jobs")
-async def create_job(file: UploadFile = File(...)):
+async def create_job(file: UploadFile = File(...), icmr_mode: bool = Form(False)):
     if not file.filename.lower().endswith(".xlsx"):
         raise HTTPException(400, "Only .xlsx files are accepted.")
 
@@ -115,9 +115,27 @@ async def create_job(file: UploadFile = File(...)):
 
     storage.save(input_key, raw)
 
+    # Per-job options are persisted as a small JSON file in the SAME object
+    # storage as the input/checkpoint/output (NOT a new Postgres column, so
+    # no live DB migration is needed). The worker and the /requeue path both
+    # read it back, so an "ICMR mode" choice survives a requeue and never
+    # leaks into a different job running in the same worker process.
+    _save_job_config(job_id, {"optional_column_groups":
+                              ["icmr_flags", "icmr_institute"] if icmr_mode else []})
+
     run_extraction_job.delay(job_id)
 
-    return {"job_id": job_id, "total_rows": len(df_in), "status": "queued"}
+    return {"job_id": job_id, "total_rows": len(df_in), "status": "queued",
+            "icmr_mode": bool(icmr_mode)}
+
+
+def _config_key(job_id: str) -> str:
+    return f"jobs/{job_id}/config.json"
+
+
+def _save_job_config(job_id: str, cfg: dict) -> None:
+    import json
+    storage.save(_config_key(job_id), json.dumps(cfg).encode("utf-8"))
 
 
 @app.get("/jobs")

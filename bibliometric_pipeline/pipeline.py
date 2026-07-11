@@ -67,21 +67,23 @@ def load_checkpoint(checkpoint_file=None):
         return {}, set()
 
 
-def save_results(results, path):
+def save_results(results, path, output_columns=None):
+    output_columns = output_columns or OUTPUT_COLUMNS
     rows = list(results.values()) if isinstance(results, dict) else results
     df = pd.DataFrame(rows)
-    for c in OUTPUT_COLUMNS:
+    for c in output_columns:
         if c not in df.columns:
             df[c] = ""
-    df = df[OUTPUT_COLUMNS]
+    df = df[output_columns]
     if path.lower().endswith(".csv"):
         df.to_csv(path, index=False)
     else:
         df.to_excel(path, index=False)
 
 
-def write_final(results, input_order, output_file=None):
+def write_final(results, input_order, output_file=None, output_columns=None):
     output_file = output_file or config.OUTPUT_FILE
+    output_columns = output_columns or OUTPUT_COLUMNS
     by_sno = dict(results) if isinstance(results, dict) else {str(r["Sno."]): r for r in results}
     ordered = [by_sno[s] for s in input_order if s in by_sno]
     seen = set(input_order)
@@ -89,17 +91,18 @@ def write_final(results, input_order, output_file=None):
         if sno not in seen:
             ordered.append(r)
     df = pd.DataFrame(ordered)
-    for c in OUTPUT_COLUMNS:
+    for c in output_columns:
         if c not in df.columns:
             df[c] = ""
-    df = df[OUTPUT_COLUMNS]
+    df = df[output_columns]
     df.to_excel(output_file, index=False)
     print(f"\nFinal file written: {output_file}  ({len(df)} rows)")
     return df
 
 
 def run_pipeline(df_in, checkpoint_path, output_path=None, progress_callback=None,
-                  sno_col=None, title_col=None, doi_col=None):
+                  sno_col=None, title_col=None, doi_col=None,
+                  optional_column_groups=None):
     """UI-agnostic core of the extraction run loop.
 
     Same resumability/dedup/retry logic as run(), but:
@@ -120,6 +123,18 @@ def run_pipeline(df_in, checkpoint_path, output_path=None, progress_callback=Non
     sno_col = sno_col or config.COL_SNO
     title_col = title_col or config.COL_TITLE
     doi_col = doi_col or config.COL_DOI
+
+    # Per-run output projection. If the caller passed an explicit list of
+    # optional column groups (e.g. a single job requesting "ICMR mode"), use
+    # it INSTEAD of the process-wide env default, so one job's choice never
+    # leaks into another job running in the same long-lived worker. If None,
+    # fall back to the module-level OUTPUT_COLUMNS (env-driven) — unchanged
+    # behaviour for the CLI and any caller that doesn't pass this.
+    if optional_column_groups is None:
+        output_columns = OUTPUT_COLUMNS
+    else:
+        from .matcher import build_output_columns
+        output_columns = build_output_columns(optional_column_groups)
 
     def report(done, total, message):
         if progress_callback:
@@ -189,19 +204,21 @@ def run_pipeline(df_in, checkpoint_path, output_path=None, progress_callback=Non
         report(len(done), total, f"Sno {sno} | {match_status} | {snippet}")
 
         if processed_now % config.CHECKPOINT_EVERY == 0:
-            save_results(results, checkpoint_path)
+            save_results(results, checkpoint_path, output_columns=output_columns)
             report(len(done), total, f"checkpoint saved ({len(results)} records)")
 
-    save_results(results, checkpoint_path)
-    final_df = write_final(results, input_order, output_file=output_path) if output_path else None
+    save_results(results, checkpoint_path, output_columns=output_columns)
+    final_df = (write_final(results, input_order, output_file=output_path,
+                            output_columns=output_columns)
+                if output_path else None)
     if final_df is None:
         by_sno = dict(results)
         ordered = [by_sno[s] for s in input_order if s in by_sno]
         final_df = pd.DataFrame(ordered)
-        for c in OUTPUT_COLUMNS:
+        for c in output_columns:
             if c not in final_df.columns:
                 final_df[c] = ""
-        final_df = final_df[OUTPUT_COLUMNS]
+        final_df = final_df[output_columns]
 
     n_review = status_counts.get("Needs manual review", 0)
     n_pending_retry = sum(1 for sno in results if sno not in done)

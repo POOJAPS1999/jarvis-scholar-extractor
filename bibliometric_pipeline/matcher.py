@@ -103,6 +103,25 @@ def _build_output_columns():
 OUTPUT_COLUMNS = _build_output_columns()
 
 
+def build_output_columns(groups=None):
+    """Build an output-column list for an EXPLICIT list of optional group
+    names, independent of the process-wide BIBLIO_OPTIONAL_COLUMN_GROUPS env
+    var. Used for per-job overrides (e.g. an "ICMR mode" request on a single
+    job) so one job's choice never leaks into another running in the same
+    long-lived worker process. Unknown group names are ignored. All the
+    optional-group VALUES are always computed by build_row() regardless; this
+    only controls which of them survive into the final projected output."""
+    cols = list(CORE_COLUMNS)
+    for g in (groups or []):
+        cols.extend(OPTIONAL_COLUMN_GROUPS.get(g, []))
+    seen, out = set(), []
+    for c in cols:
+        if c not in seen:
+            seen.add(c)
+            out.append(c)
+    return out
+
+
 def first_nonempty(*vals):
     for v in vals:
         if v is None:

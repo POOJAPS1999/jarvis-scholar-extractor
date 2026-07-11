@@ -34,6 +34,25 @@ from .models import get_session_direct, Job  # noqa: E402
 from . import storage  # noqa: E402
 
 
+def _load_optional_column_groups(job_id):
+    """Read the per-job config file (jobs/{id}/config.json) written by the
+    API when the job was created. Returns the list of optional column groups
+    (e.g. ["icmr_flags", "icmr_institute"] for ICMR mode), or None if there
+    is no config file — in which case run_pipeline falls back to the
+    process-wide env default, preserving the old behaviour for any job
+    created before this feature existed."""
+    import json
+    key = f"jobs/{job_id}/config.json"
+    try:
+        if not storage.exists(key):
+            return None
+        cfg = json.loads(storage.load(key).decode("utf-8"))
+    except Exception:
+        return None
+    groups = cfg.get("optional_column_groups")
+    return groups if isinstance(groups, list) else None
+
+
 def _update_job(job_id, **fields):
     with get_session_direct() as session:
         job = session.get(Job, job_id)
@@ -55,6 +74,8 @@ def run_extraction_job(self, job_id: str):
         input_key = job.input_key
         checkpoint_key = job.checkpoint_key
         output_key = job.output_key
+
+    optional_column_groups = _load_optional_column_groups(job_id)
 
     _update_job(job_id, status="running", progress_message="Starting...")
 
@@ -92,6 +113,7 @@ def run_extraction_job(self, job_id: str):
                 checkpoint_path=local_checkpoint,
                 output_path=local_output,
                 progress_callback=on_progress,
+                optional_column_groups=optional_column_groups,
             )
         except Exception as e:
             tb = traceback.format_exc()
