@@ -39,6 +39,11 @@ TOOLS = [
         "fmt": "Needs .xlsx with Sno · Clean Title · DOI (template on the page).",
     },
     {
+        "page": "pages/6_Scopus_Format_Converter.py", "icon": "🛸", "title": "Scopus-format Converter",
+        "desc": "Convert an already-enriched dataset into Biblioshiny/VOSviewer-ready Scopus CSV — no re-enrichment.",
+        "fmt": "Upload a Jarvis Scholar enriched output .xlsx/.csv.",
+    },
+    {
         "page": "pages/1_Convert_Citations.py", "icon": "📄", "title": "Convert Citations",
         "desc": "Turn a PubMed (MEDLINE .txt/.nbib) or RIS export into a clean CSV/Excel, pipeline-ready.",
         "fmt": "Upload a .txt / .nbib / .ris export.",
