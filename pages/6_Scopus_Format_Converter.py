@@ -25,7 +25,7 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from export_scopus_csv import convert_row, SCOPUS_COLUMNS, PROVENANCE_COLUMNS
-from bibliometric_pipeline.branding import THEME_CSS
+from bibliometric_pipeline.branding import THEME_CSS, scopus_input_template_bytes
 from bibliometric_pipeline.ui_helpers import read_tabular_upload
 
 st.set_page_config(page_title="Jarvis Scholar - Scopus Converter", layout="wide")
@@ -52,6 +52,15 @@ with st.expander("What file does this expect?", expanded=False):
         "trailing `Jarvis_*` provenance columns (which Scopus/VOSviewer parsers "
         "ignore). Rows with a blank `EID` are kept, but note Biblioshiny itself "
         "drops blank-EID rows on import."
+    )
+    st.download_button(
+        "⬇ Download blank Scopus-converter input template (.xlsx)",
+        data=scopus_input_template_bytes(),
+        file_name="jarvis_scholar_scopus_input_template.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        help="The columns this tool reads, with one worked example row. Normally "
+             "you'd just use the enrichment output directly — this is for building "
+             "an enriched-style dataset by hand.",
     )
 
 uploaded = st.file_uploader(

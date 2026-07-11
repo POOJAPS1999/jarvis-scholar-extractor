@@ -144,3 +144,64 @@ def enrichment_template_bytes() -> bytes:
     with pd.ExcelWriter(buf, engine="openpyxl") as xw:
         df.to_excel(xw, index=False, sheet_name="Enrichment Input")
     return buf.getvalue()
+
+
+# Columns the Scopus converter (export_scopus_csv.convert_row) actually reads
+# from an enriched dataset, in a sensible fill-in order. A user preparing data
+# by hand only needs these; anything blank is tolerated (left empty in the
+# Scopus output), but EID must be non-blank or Biblioshiny drops the row.
+SCOPUS_INPUT_COLUMNS = [
+    "EID", "TITLE", "Clean Title", "Authors", "Author(s) ID (synthetic)",
+    "YEAR", "Journal", "DOI", "Citations", "Source Link",
+    "Affliation", "Author_Affiliation_Map", "Corresponding Author",
+    "Corresponding Author Email ID", "Abstract",
+    "Author Keywords (Other Terms)", "MeSH Terms", "Concepts",
+    "Grants", "References", "Publisher", "ISSN", "PMID",
+    "Article Type", "Open Access",
+    "Match Status", "Match Score", "Match Source",
+    "Fetch Issues", "Reconciliation Notes",
+]
+
+
+def scopus_input_template_bytes() -> bytes:
+    """Blank .xlsx with the columns the Scopus converter reads, plus one
+    worked example row showing the expected shape of each field (e.g. the
+    Author_Affiliation_Map JSON, semicolon-joined authors, a synthetic EID)."""
+    example = {
+        "EID": "2-s2.0-12345678901",
+        "TITLE": "Circulating tumor DNA in neuroblastoma",
+        "Clean Title": "circulating tumor dna in neuroblastoma",
+        "Authors": "Sharma, Pooja; Kumar, Anil",
+        "Author(s) ID (synthetic)": "11122233344; 55566677788",
+        "YEAR": "2024",
+        "Journal": "Pediatric Blood & Cancer",
+        "DOI": "10.1002/pbc.28311",
+        "Citations": "12",
+        "Source Link": "https://doi.org/10.1002/pbc.28311",
+        "Affliation": "Dept of Oncology, ICMR-NIV, Pune, India",
+        "Author_Affiliation_Map": '{"Sharma, Pooja": "ICMR-NIV, Pune", "Kumar, Anil": "AIIMS, New Delhi"}',
+        "Corresponding Author": "Sharma, Pooja",
+        "Corresponding Author Email ID": "pooja@example.org",
+        "Abstract": "Example abstract text.",
+        "Author Keywords (Other Terms)": "ctDNA; liquid biopsy",
+        "MeSH Terms": "Neuroblastoma; DNA, Neoplasm",
+        "Concepts": "oncology; genetics",
+        "Grants": "ICMR grant 12345",
+        "References": "Ref 1; Ref 2",
+        "Publisher": "Wiley",
+        "ISSN": "1545-5017",
+        "PMID": "29923838",
+        "Article Type": "journal-article",
+        "Open Access": "Yes",
+        "Match Status": "Auto-accepted",
+        "Match Score": "98",
+        "Match Source": "Crossref",
+        "Fetch Issues": "",
+        "Reconciliation Notes": "",
+    }
+    df = pd.DataFrame([{c: example.get(c, "") for c in SCOPUS_INPUT_COLUMNS}])
+    df = df[SCOPUS_INPUT_COLUMNS]
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as xw:
+        df.to_excel(xw, index=False, sheet_name="Scopus Converter Input")
+    return buf.getvalue()
