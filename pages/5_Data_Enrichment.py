@@ -291,20 +291,12 @@ if uploaded is not None:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
 
-            if st.button("Also prepare Scopus-format CSV (for Biblioshiny / VOSviewer)"):
-                with st.spinner("Converting to Scopus CSV format..."):
-                    try:
-                        csv_bytes = api_get(f"/jobs/{job_id}/scopus-csv").content
-                    except Exception as e:
-                        st.error(f"Could not generate Scopus CSV: {e}")
-                        csv_bytes = None
-                if csv_bytes:
-                    st.download_button(
-                        "Download Scopus-format CSV",
-                        data=csv_bytes,
-                        file_name=f"scopus_format_{job_id}.csv",
-                        mime="text/csv",
-                    )
+            st.info(
+                "Need a Scopus-format CSV for Biblioshiny / VOSviewer? Download the "
+                "enriched Excel above, then open the **Scopus-format Converter** tool "
+                "from the dashboard and upload it there.",
+                icon="🛸",
+            )
 
         if st.button("Start a new job (different file)", key=f"reset_{job_id}"):
             del st.session_state[job_key]
