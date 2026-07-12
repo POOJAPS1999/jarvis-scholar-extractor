@@ -1,4 +1,10 @@
-pandas
+# Pinned scientific stack — unpinned versions let uv re-resolve on every
+# reboot and occasionally pulls a numpy build whose ABI mismatches the
+# pandas/matplotlib wheels, segfaulting Streamlit on import. This known-good,
+# all-numpy-1.x combo makes the build deterministic.
+numpy==1.26.4
+pandas==2.2.2
+matplotlib==3.8.4
 openpyxl
 requests
 rapidfuzz
@@ -6,7 +12,6 @@ pycountry
 python-dotenv
 streamlit
 rispy
-matplotlib
 networkx
 plotly
 
