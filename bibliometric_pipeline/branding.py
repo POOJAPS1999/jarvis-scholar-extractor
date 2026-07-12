@@ -123,6 +123,12 @@ hr {{ border-color: var(--js-line) !important; }}
   border-radius:7px; padding:3px 8px; margin:0 6px 6px 0; }}
 .js-open {{ margin-top:12px; font-family:{_SANS}; font-weight:700; font-size:.9rem; color:var(--js-cyan); }}
 .js-footnote {{ text-align:center; color:var(--js-sub); font-family:{_SERIF}; font-size:.86rem; margin-top:18px; }}
+
+/* never underline anything (links, cards, nav) — looks cleaner */
+a, a:hover, a:focus, a:active, a:visited,
+.js-card, .js-tool-card, .js-pipe-card,
+[data-testid="stSidebarNav"] a, [data-testid="stPageLink"] a {{ text-decoration: none !important; }}
+a:hover, .js-open:hover {{ text-decoration: none !important; }}
 </style>
 """
 
