@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from bibliometric_pipeline.icmr_institutes import resolve_all_icmr_institutes
 from bibliometric_pipeline import icmr_tables as it
 from bibliometric_pipeline.ui_helpers import download_buttons, read_tabular_upload
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer, icmr_tagger_template_bytes
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer, icmr_tagger_template_bytes, icmr_tagger_preview
 
 st.set_page_config(page_title="Jarvis Scholar - ICMR Tagger", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -227,5 +227,7 @@ how_to_use([
     ("📊", "Read the summary",
      "See how many rows have an institute, how many mention 2+, and the per-institute breakdown."),
     ("⬇️", "Download the tagged sheet",
-     "A new ‘ICMR Institute (Current Name)’ column is added; download as CSV or Excel."),
-])
+     "A new ‘ICMR Institute (Current Name)’ column is added; download as CSV or Excel. "
+     "If your sheet is enriched (has Citations etc.), Tables 3/4/5/8/10 appear above too."),
+], preview_image=icmr_tagger_preview(),
+   preview_caption="Affiliation columns this tool scans (download the template above)")

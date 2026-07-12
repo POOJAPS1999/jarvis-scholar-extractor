@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline.fuzzy_tools import cross_match, self_dedup
 from bibliometric_pipeline.ui_helpers import download_buttons, read_tabular_upload
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer, fuzzy_titles_template_bytes
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer, fuzzy_titles_template_bytes, fuzzy_preview
 
 st.set_page_config(page_title="Jarvis Scholar - Fuzzy Title Match", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -147,4 +147,5 @@ how_to_use([
      "Click the button. The JARVIS loader shows while it compares — long lists take a few seconds."),
     ("⬇️", "Review & download",
      "Check the matched/duplicate pairs and scores, then download as CSV or Excel."),
-])
+], preview_image=fuzzy_preview(),
+   preview_caption="A simple Title column is all each file needs (download the template above)")

@@ -196,15 +196,78 @@ def feature_cards_html(tools: list) -> str:
 # ---------------------------------------------------------------------
 # "How to use" step block (illustrated; real screenshots added later)
 # ---------------------------------------------------------------------
-def how_to_use(steps: list, shot_hint: bool = True):
-    """Render a 'How to use' section. `steps` is a list of (icon, title,
-    description) tuples. Call inside a Streamlit page (uses st)."""
+def template_preview_png(df, title: str = "", max_cols: int = 6, max_rows: int = 3) -> bytes:
+    """Render a styled table image of a tool's blank template — the 'this is
+    what your input file should look like' visual used in the instructions."""
+    import io as _io
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    d = df.iloc[:max_rows, :max_cols].copy()
+    for c in d.columns:
+        d[c] = d[c].astype(str).map(lambda v: (v[:26] + "…") if len(v) > 27 else v)
+    ncols, nrows = max(1, len(d.columns)), max(1, len(d))
+    fig, ax = plt.subplots(figsize=(min(2.4 + 2.3 * ncols, 13), 1.0 + 0.55 * nrows), dpi=150)
+    ax.axis("off")
+    tbl = ax.table(cellText=d.values if len(d) else [[""] * ncols],
+                   colLabels=list(d.columns), cellLoc="left", loc="center")
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(9)
+    tbl.scale(1, 1.7)
+    for (r, c), cell in tbl.get_celld().items():
+        cell.set_edgecolor("#d6e3f2")
+        if r == 0:
+            cell.set_facecolor("#0e7f9c")
+            cell.set_text_props(color="white", fontweight="bold")
+        else:
+            cell.set_facecolor("#f2f8fc" if r % 2 else "#ffffff")
+            cell.set_text_props(color="#12283b")
+    if title:
+        ax.set_title(title, loc="left", color="#12283b", fontsize=12, fontweight="bold", pad=12)
+    fig.tight_layout()
+    buf = _io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return buf.getvalue()
+
+
+def text_preview_png(text: str, title: str = "") -> bytes:
+    """Render a monospace snippet image (for file formats that aren't tables,
+    e.g. a PubMed MEDLINE / RIS export)."""
+    import io as _io
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    lines = text.strip("\n").split("\n")
+    fig, ax = plt.subplots(figsize=(9, 0.55 + 0.28 * len(lines)), dpi=150)
+    ax.axis("off")
+    ax.add_patch(plt.Rectangle((0, 0), 1, 1, transform=ax.transAxes,
+                               facecolor="#f2f8fc", edgecolor="#d6e3f2"))
+    ax.text(0.02, 0.94, "\n".join(lines), va="top", ha="left", family="monospace",
+            fontsize=9.5, color="#12283b", transform=ax.transAxes)
+    if title:
+        ax.set_title(title, loc="left", color="#12283b", fontsize=12, fontweight="bold", pad=10)
+    fig.tight_layout()
+    buf = _io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return buf.getvalue()
+
+
+def how_to_use(steps: list, preview_image: bytes = None, preview_caption: str = None):
+    """Render a 'How to use' section: an optional input-format preview image
+    followed by tool-specific numbered steps. `steps` is a list of
+    (icon, title, description) tuples."""
     import streamlit as st
 
     st.markdown("### How to use this tool")
+    if preview_image is not None:
+        st.image(preview_image, caption=preview_caption or "What your input file should look like",
+                 use_container_width=True)
     rows = []
     for i, (icon, title, desc) in enumerate(steps, start=1):
-        shot = ('<div class="js-shot">🖼 Step screenshot coming soon</div>' if shot_hint else "")
         rows.append(f"""
   <div class="js-step">
     <div class="js-step-n">{i}</div>
@@ -212,7 +275,6 @@ def how_to_use(steps: list, shot_hint: bool = True):
     <div class="js-step-b">
       <div class="js-step-t">{title}</div>
       <div class="js-step-d">{desc}</div>
-      {shot}
     </div>
   </div>""")
     st.markdown(f'<div class="js-how">{"".join(rows)}</div>', unsafe_allow_html=True)
@@ -298,6 +360,47 @@ def merge_example_bytes() -> bytes:
         a.to_excel(xw, index=False, sheet_name="Sheet A")
         b.to_excel(xw, index=False, sheet_name="Sheet B")
     return buf.getvalue()
+
+
+def _preview_from_bytes(template_bytes, title, sheet=0, max_cols=6):
+    import io as _io
+    df = pd.read_excel(_io.BytesIO(template_bytes), sheet_name=sheet)
+    return template_preview_png(df, title, max_cols=max_cols)
+
+
+def enrichment_preview():
+    return _preview_from_bytes(enrichment_template_bytes(), "Your file: Sno · Clean Title · DOI")
+
+
+def icmr_tagger_preview():
+    return _preview_from_bytes(icmr_tagger_template_bytes(),
+                               "Your file: affiliation columns (Affliation, First/Corresponding Author Affiliation…)")
+
+
+def fuzzy_preview():
+    return _preview_from_bytes(fuzzy_titles_template_bytes(), "Your file: a Title column")
+
+
+def merge_preview():
+    return _preview_from_bytes(merge_example_bytes(), "One of your two sheets (join on a shared column)",
+                               sheet="Sheet A")
+
+
+def scientometrics_preview():
+    return _preview_from_bytes(scopus_input_template_bytes(),
+                               "Your file: an enriched dataset (TITLE, Authors, DOI, Citations…)", max_cols=7)
+
+
+def convert_citations_preview():
+    return text_preview_png(
+        "PMID- 39593169\n"
+        "TI  - Personalized circulating tumor DNA analysis in neuroblastoma.\n"
+        "AU  - Sharma P\n"
+        "AU  - Kumar A\n"
+        "DP  - 2024\n"
+        "TA  - Sci Rep\n"
+        "AID - 10.1186/s40364-024-00688-5 [doi]",
+        "PubMed MEDLINE export (.txt) — one tag per line (RIS looks similar with TY/TI/AU/DO)")
 
 
 def scopus_input_template_bytes() -> bytes:

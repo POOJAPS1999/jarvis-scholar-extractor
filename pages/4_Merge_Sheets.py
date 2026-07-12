@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline.sheet_merge import merge_sheets, JOIN_TYPES
 from bibliometric_pipeline.ui_helpers import download_buttons
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer, merge_example_bytes
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer, merge_example_bytes, merge_preview
 
 st.set_page_config(page_title="Jarvis Scholar - Merge Sheets", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -139,4 +139,5 @@ how_to_use([
      "Click ‘Merge’. The loader shows while rows are joined; you’ll get a summary of matched and unmatched rows."),
     ("⬇️", "Download the merged sheet",
      "Preview the result and download as CSV or Excel."),
-])
+], preview_image=merge_preview(),
+   preview_caption="Each sheet is any table with a column to join on (here: DOI). Download the example above")

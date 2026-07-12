@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from export_scopus_csv import convert_row, SCOPUS_COLUMNS, PROVENANCE_COLUMNS
 from bibliometric_pipeline.branding import (
     THEME_CSS, scopus_input_template_bytes, reactor_loader_html, how_to_use, brand_footer,
+    scientometrics_preview,
 )
 from bibliometric_pipeline.ui_helpers import read_tabular_upload
 
@@ -173,4 +174,5 @@ how_to_use([
      "Click ‘Convert to Scopus format’. The loader shows while rows are reformatted to the 44 Scopus columns."),
     ("⬇️", "Download for Biblioshiny / VOSviewer",
      "Download the CSV and import it into bibliometrix/Biblioshiny or VOSviewer (Scopus format)."),
-])
+], preview_image=scientometrics_preview(),
+   preview_caption="An enriched dataset (TITLE, Authors, DOI, Citations…). Download the template above")

@@ -18,7 +18,7 @@ import streamlit as st
 _HERE = os.path.dirname(os.path.abspath(__file__))
 import sys
 sys.path.insert(0, os.path.dirname(_HERE))
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, enrichment_template_bytes, how_to_use, brand_footer
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, enrichment_template_bytes, how_to_use, brand_footer, enrichment_preview
 
 try:
     _secret_url = st.secrets.get("API_BASE_URL")
@@ -354,5 +354,6 @@ how_to_use([
     ("✅", "Review low-confidence matches",
      "Accept, reject, or retry-with-a-corrected-DOI. Accept/Reject are recorded instantly — only a corrected-DOI retry re-runs that row."),
     ("⬇️", "Download results",
-     "Grab the enriched Excel. For Biblioshiny/VOSviewer, pass it through the Scopus-format Converter tool."),
-])
+     "Grab the enriched Excel, or the Scopus-format CSV right there on the results page (for Biblioshiny/VOSviewer)."),
+], preview_image=enrichment_preview(),
+   preview_caption="Exactly three columns: Sno, Clean Title, DOI (download the template above)")

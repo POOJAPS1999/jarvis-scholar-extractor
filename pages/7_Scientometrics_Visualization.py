@@ -25,6 +25,7 @@ from bibliometric_pipeline import networks as nw
 from bibliometric_pipeline import icmr_tables as it
 from bibliometric_pipeline.branding import (
     THEME_CSS, reactor_loader_html, how_to_use, brand_footer, scopus_input_template_bytes,
+    scientometrics_preview,
 )
 from bibliometric_pipeline.ui_helpers import download_buttons, read_tabular_upload
 
@@ -65,12 +66,13 @@ if uploaded is None:
         ("📤", "Upload the enriched sheet",
          "Drop the .xlsx/.csv here. Columns are auto-detected — journal, year, citations, authors, references, keywords."),
         ("⚙️", "Choose options",
-         "Turn on ICMR mode for ICMR-specific breakdowns (coming in a later phase). Set how many rows each ‘top N’ table shows."),
-        ("📊", "Read the tables & charts",
-         "Dataset overview, missing-data, annual trends, Bradford’s law, leading sources, h-index, and top-cited records render below."),
-        ("⬇️", "Download any table",
-         "Each table has CSV/Excel download buttons for your manuscript or further analysis."),
-    ])
+         "Turn on ICMR mode for the ICMR institute tables (section 12). Set how many rows each ‘top N’ table shows."),
+        ("📊", "Read the tables, charts & maps",
+         "Overview, annual trends, Bradford, sources, h-index, top-cited; then VOSviewer-style network maps (section 9), the thematic map (10), and funding (11)."),
+        ("⬇️", "Download anything",
+         "Every table → CSV/Excel; every chart & map → PNG; and maps also export VOSviewer .map/.net files."),
+    ], preview_image=scientometrics_preview(),
+       preview_caption="An enriched dataset (TITLE, Authors, DOI, Citations, keywords…). Download the template above")
     st.stop()
 
 try:
@@ -360,5 +362,5 @@ how_to_use([
      "In section 9, pick a map (co-authorship, institutional, country, keyword, coupling), tune the sliders, and click Generate."),
     ("⬇️", "Export",
      "Every table downloads as CSV/Excel; every chart & map as PNG; and maps also export VOSviewer .map/.net files."),
-])
-st.caption("Coming next (Phase 3): strategic thematic map (motor-theme quadrant) and grants visualization.")
+], preview_image=scientometrics_preview(),
+   preview_caption="An enriched dataset (TITLE, Authors, DOI, Citations, keywords…)")

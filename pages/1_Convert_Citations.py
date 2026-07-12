@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline.converters import medline_to_dataframe, ris_to_dataframe
 from bibliometric_pipeline.ui_helpers import download_buttons
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer, convert_citations_preview
 
 st.set_page_config(page_title="Jarvis Scholar - Convert Citations", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -135,4 +135,5 @@ how_to_use([
      "Confirm titles and DOIs look right. Blank DOIs/titles are records that genuinely lacked them."),
     ("⬇️", "Download & chain",
      "Download CSV or Excel. The Excel’s first three columns feed straight into Data Enrichment."),
-])
+], preview_image=convert_citations_preview(),
+   preview_caption="A PubMed MEDLINE export (.txt) — the format this tool reads")
