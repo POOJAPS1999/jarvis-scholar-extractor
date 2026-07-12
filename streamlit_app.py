@@ -12,7 +12,7 @@ import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from bibliometric_pipeline.branding import (
-    THEME_CSS, hero_html_v2, tool_card_html, pipeline_card_html, enrichment_template_bytes,
+    THEME_CSS, hero_html_v2, enrichment_template_bytes,
 )
 from bibliometric_pipeline.auth import require_login, sidebar_account
 
@@ -52,8 +52,7 @@ PIPELINE = [
 pcols = st.columns(len(PIPELINE))
 for col, s in zip(pcols, PIPELINE):
     with col:
-        st.markdown(pipeline_card_html(s), unsafe_allow_html=True)
-        st.page_link(s["page"], label=f"Open {s['title']} →")
+        st.page_link(s["page"], label=f"{s['icon']} **{s['title']}**  \n{s['desc']}")
 
 # Module grid + search
 hc1, hc2 = st.columns([2, 1])
@@ -102,8 +101,10 @@ else:
         cols = st.columns(per_row)
         for col, t in zip(cols, row):
             with col:
-                st.markdown(tool_card_html(t), unsafe_allow_html=True)
-                st.page_link(t["page"], label=f"Open {t['title']} →")
+                pills = " · ".join(t["pills"])
+                st.page_link(
+                    t["page"],
+                    label=f"{t['icon']} **{t['title']}**  \n{t['desc']}  \n\n`{pills}`")
 
 c1, c2 = st.columns([3, 1])
 c2.download_button(

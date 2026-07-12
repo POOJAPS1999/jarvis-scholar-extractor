@@ -124,6 +124,22 @@ hr {{ border-color: var(--js-line) !important; }}
 .js-open {{ margin-top:12px; font-family:{_SANS}; font-weight:700; font-size:.9rem; color:var(--js-cyan); }}
 .js-footnote {{ text-align:center; color:var(--js-sub); font-family:{_SERIF}; font-size:.86rem; margin-top:18px; }}
 
+/* Make main-area st.page_link render as a big, whole-clickable CARD
+   (client-side nav → keeps the login session; not the sidebar nav) */
+[data-testid="stMain"] div[data-testid="stPageLink"] {{ margin:0 0 4px; }}
+[data-testid="stMain"] div[data-testid="stPageLink"] > a {{
+  display:block; text-decoration:none !important; background:#fff;
+  border:1px solid var(--js-line); border-radius:16px; padding:16px 18px; min-height:104px;
+  box-shadow:0 1px 2px rgba(18,40,59,.04);
+  transition:transform .14s ease, box-shadow .14s ease, border-color .14s ease;
+}}
+[data-testid="stMain"] div[data-testid="stPageLink"] > a:hover {{
+  border-color:var(--js-cyan); transform:translateY(-3px);
+  box-shadow:0 10px 26px rgba(18,40,59,.12);
+}}
+[data-testid="stMain"] div[data-testid="stPageLink"] p {{
+  text-align:left !important; font-family:{_SANS}; color:var(--js-ink); }}
+
 /* never underline anything (links, cards, nav) — looks cleaner */
 a, a:hover, a:focus, a:active, a:visited,
 .js-card, .js-tool-card, .js-pipe-card,
