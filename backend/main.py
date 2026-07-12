@@ -91,16 +91,21 @@ def _verify_password(pw: str, stored: str) -> bool:
 
 
 def _post_registration_webhook(payload: dict):
+    """Best-effort POST of each new signup to REGISTRATION_WEBHOOK_URL (e.g.
+    a Google Apps Script that appends to a Sheet). Uses requests (handles the
+    Apps Script 302 redirect reliably) and logs the outcome so a
+    misconfigured webhook is visible in the Railway logs — but never raises,
+    so a webhook problem can't break signup."""
     url = os.environ.get("REGISTRATION_WEBHOOK_URL")
     if not url:
+        print("[webhook] REGISTRATION_WEBHOOK_URL not set — signup stored in DB only.")
         return
     try:
-        req = urllib.request.Request(
-            url, data=_json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"})
-        urllib.request.urlopen(req, timeout=5)
-    except Exception:
-        pass  # never let a webhook failure break signup
+        import requests
+        r = requests.post(url, json=payload, timeout=8, allow_redirects=True)
+        print(f"[webhook] POST {r.status_code} to registration webhook for {payload.get('email')}")
+    except Exception as e:
+        print(f"[webhook] FAILED for {payload.get('email')}: {e}")
 
 
 class SignupBody(BaseModel):
