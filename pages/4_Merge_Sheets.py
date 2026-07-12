@@ -16,8 +16,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline.sheet_merge import merge_sheets, JOIN_TYPES
 from bibliometric_pipeline.ui_helpers import download_buttons
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use
 
 st.set_page_config(page_title="Jarvis Scholar - Merge Sheets", layout="wide")
+st.markdown(THEME_CSS, unsafe_allow_html=True)
 st.title("Merge two sheets")
 st.caption(
     "Upload two spreadsheets, pick the column(s) to match on (names can differ), "
@@ -75,14 +77,19 @@ case_insensitive = o2.checkbox("Ignore letter case", value=True)
 trim = o3.checkbox("Ignore surrounding spaces", value=True)
 
 if st.button("Merge", type="primary"):
+    _loader = st.empty()
+    _loader.markdown(reactor_loader_html("JARVIS is merging your sheets…"), unsafe_allow_html=True)
     try:
-        merged, summary = merge_sheets(
-            df_a, df_b, left_on=left_on, right_on=right_on, how=how,
-            case_insensitive=case_insensitive, trim=trim,
-        )
+        with st.spinner("Joining rows…"):
+            merged, summary = merge_sheets(
+                df_a, df_b, left_on=left_on, right_on=right_on, how=how,
+                case_insensitive=case_insensitive, trim=trim,
+            )
     except Exception as e:
+        _loader.empty()
         st.error(f"Merge failed: {e}")
         st.stop()
+    _loader.empty()
 
     st.success(f"Merged: {summary['rows_out']} rows out ({summary['matched_pairs']} matched pairs).")
     m = st.columns(4)
@@ -101,3 +108,17 @@ if st.button("Merge", type="primary"):
     st.subheader("Preview")
     st.dataframe(merged.head(50), use_container_width=True, hide_index=True)
     download_buttons(merged, stem="merged_sheets", key_prefix="merge", sheet_name="Merged")
+
+st.markdown("---")
+how_to_use([
+    ("📤", "Upload two sheets",
+     "Sheet A and Sheet B (.xlsx/.csv). For multi-tab Excel files you’ll be asked which tab to use."),
+    ("🔗", "Pick the column(s) to match on",
+     "Choose one or more join columns from each sheet — the names don’t have to be the same between A and B."),
+    ("⚙️", "Choose the join type",
+     "inner = only matched rows · left = all of A · right = all of B · outer = everything. Toggle case/space matching if keys look the same but don’t join."),
+    ("▶️", "Merge",
+     "Click ‘Merge’. The loader shows while rows are joined; you’ll get a summary of matched and unmatched rows."),
+    ("⬇️", "Download the merged sheet",
+     "Preview the result and download as CSV or Excel."),
+])

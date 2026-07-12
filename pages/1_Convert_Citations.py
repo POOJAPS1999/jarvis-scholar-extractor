@@ -18,8 +18,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline.converters import medline_to_dataframe, ris_to_dataframe
 from bibliometric_pipeline.ui_helpers import download_buttons
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use
 
 st.set_page_config(page_title="Jarvis Scholar - Convert Citations", layout="wide")
+st.markdown(THEME_CSS, unsafe_allow_html=True)
 st.title("Convert citations to CSV / Excel")
 st.caption(
     "Upload a PubMed (MEDLINE .txt/.nbib) or RIS (.ris) export and get back a "
@@ -68,14 +70,19 @@ fmt = st.radio(
     help=f"Auto-detected: {detected}. Override here if that's wrong.",
 )
 
+_loader = st.empty()
+_loader.markdown(reactor_loader_html(f"JARVIS is parsing your {fmt} file…"), unsafe_allow_html=True)
 try:
-    if fmt == "RIS":
-        df = ris_to_dataframe(raw)
-    else:
-        df = medline_to_dataframe(raw)
+    with st.spinner("Parsing records…"):
+        if fmt == "RIS":
+            df = ris_to_dataframe(raw)
+        else:
+            df = medline_to_dataframe(raw)
 except Exception as e:
+    _loader.empty()
     st.error(f"Could not parse that file as {fmt}: {e}")
     st.stop()
+_loader.empty()
 
 if df.empty:
     st.warning(
@@ -110,3 +117,18 @@ st.caption(
     "Tip: the first three columns (`Sno`, `Clean Title`, `DOI`) are exactly "
     "what the main extractor needs — download the Excel and upload it there to enrich."
 )
+
+st.markdown("---")
+how_to_use([
+    ("💾", "Export from your source",
+     "In PubMed: Send to → File → Format ‘PubMed’ (a MEDLINE .txt). Or export RIS from Zotero, "
+     "Scopus, Embase, or a journal page."),
+    ("📤", "Upload the file",
+     "Drop the .txt / .nbib / .ris here. The format is auto-detected; override it above if needed."),
+    ("⏳", "Wait for the parse",
+     "The JARVIS loader shows while records are read. You’ll see counts for records, missing DOIs, and missing titles."),
+    ("👀", "Check the preview",
+     "Confirm titles and DOIs look right. Blank DOIs/titles are records that genuinely lacked them."),
+    ("⬇️", "Download & chain",
+     "Download CSV or Excel. The Excel’s first three columns feed straight into Data Enrichment."),
+])

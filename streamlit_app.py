@@ -1,17 +1,12 @@
 """
 streamlit_app.py
 ================
-Jarvis Scholar — dashboard HOME.
+Jarvis Scholar — dashboard HOME (launcher).
 
-This file used to hold the extractor flow directly. That flow now lives in
-pages/5_Data_Enrichment.py; this file is the launcher: a sci-fi command-deck
-of selectable tools, each with a short description and its own page (with
-per-tool instructions + upload-format help + template downloads on the page
-itself).
-
-Streamlit multipage: every file under pages/ shows in the left nav
-automatically; the cards below are just a nicer, described entry point to
-the same pages.
+A light "scientific lab" command deck: each capability is a clickable tile
+(the WHOLE box navigates to the tool). Per-tool instructions live on each
+tool page. Streamlit auto-discovers pages/ for the sidebar nav; these tiles
+are a friendlier, described entry point to the same pages.
 """
 import os
 import sys
@@ -19,82 +14,81 @@ import sys
 import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from bibliometric_pipeline.branding import THEME_CSS, hero_html, enrichment_template_bytes
+from bibliometric_pipeline.branding import (
+    THEME_CSS, hero_html, feature_cards_html, enrichment_template_bytes,
+)
 
 st.set_page_config(page_title="Jarvis Scholar", layout="wide", page_icon="🛰")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
 
 st.markdown(
-    hero_html("JARVIS SCHOLAR",
-              "Bibliometric intelligence console · enrich · convert · match · merge · tag"),
+    hero_html("Jarvis Scholar",
+              "Bibliometric intelligence console — enrich · convert · match · merge · tag"),
     unsafe_allow_html=True,
 )
-st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
-# Each tool: page path, icon, title, one-line description, format hint.
-TOOLS = [
-    {
-        "page": "pages/5_Data_Enrichment.py", "icon": "🛰", "title": "Data Enrichment",
-        "desc": "Upload a title/DOI list → PubMed + OpenAlex + Crossref merged into one clean row per paper.",
-        "fmt": "Needs .xlsx with Sno · Clean Title · DOI (template on the page).",
-    },
-    {
-        "page": "pages/6_Scopus_Format_Converter.py", "icon": "🛸", "title": "Scopus-format Converter",
-        "desc": "Convert an already-enriched dataset into Biblioshiny/VOSviewer-ready Scopus CSV — no re-enrichment.",
-        "fmt": "Upload a Jarvis Scholar enriched output .xlsx/.csv.",
-    },
-    {
-        "page": "pages/1_Convert_Citations.py", "icon": "📄", "title": "Convert Citations",
-        "desc": "Turn a PubMed (MEDLINE .txt/.nbib) or RIS export into a clean CSV/Excel, pipeline-ready.",
-        "fmt": "Upload a .txt / .nbib / .ris export.",
-    },
-    {
-        "page": "pages/2_ICMR_Institute_Tagger.py", "icon": "🏛", "title": "ICMR Institute Tagger",
-        "desc": "Tag each row with its ICMR institute (handles former names, acronyms, multi-site rows).",
-        "fmt": "Upload a sheet with affiliation column(s).",
-    },
-    {
-        "page": "pages/3_Fuzzy_Title_Match.py", "icon": "🔭", "title": "Fuzzy Title Match",
-        "desc": "Match titles by similarity — reconcile two lists, or find duplicates within one.",
-        "fmt": "Upload one or two .xlsx/.csv lists of titles.",
-    },
-    {
-        "page": "pages/4_Merge_Sheets.py", "icon": "🧬", "title": "Merge Sheets",
-        "desc": "Join two spreadsheets on matched column(s) — names can differ — with an unmatched-rows report.",
-        "fmt": "Upload two .xlsx/.csv sheets.",
-    },
-]
-
-st.markdown("#### Select a module")
-
-# Render the cards in rows of up to 3, each with a working page-link button.
-per_row = 3
-for start in range(0, len(TOOLS), per_row):
-    row = TOOLS[start:start + per_row]
-    cols = st.columns(len(row))
-    for col, t in zip(cols, row):
-        with col:
-            st.markdown(
-                f"""
-<div class="js-card">
-  <div class="js-ic">{t['icon']}</div>
-  <div class="js-title">{t['title']}</div>
-  <div class="js-desc">{t['desc']}</div>
-  <div class="js-tag">{t['fmt']}</div>
+# Compact "what this does" infographic strip (pipeline at a glance).
+st.markdown(
+    """
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:12px 0 4px;">
+  <div style="background:#ffffff;border:1px solid #d6e3f2;border-radius:14px;padding:14px 16px;">
+    <div style="font-size:22px">📥</div>
+    <div style="font-family:'Segoe UI',sans-serif;font-weight:700;color:#12283b;margin-top:4px">Bring data in</div>
+    <div style="color:#4a627a;font-size:.86rem">PubMed / RIS → clean CSV</div>
+  </div>
+  <div style="background:#ffffff;border:1px solid #d6e3f2;border-radius:14px;padding:14px 16px;">
+    <div style="font-size:22px">🛰</div>
+    <div style="font-family:'Segoe UI',sans-serif;font-weight:700;color:#12283b;margin-top:4px">Enrich</div>
+    <div style="color:#4a627a;font-size:.86rem">PubMed + OpenAlex + Crossref</div>
+  </div>
+  <div style="background:#ffffff;border:1px solid #d6e3f2;border-radius:14px;padding:14px 16px;">
+    <div style="font-size:22px">🧪</div>
+    <div style="font-family:'Segoe UI',sans-serif;font-weight:700;color:#12283b;margin-top:4px">Match · merge · tag</div>
+    <div style="color:#4a627a;font-size:.86rem">Dedup, join, ICMR institutes</div>
+  </div>
+  <div style="background:#ffffff;border:1px solid #d6e3f2;border-radius:14px;padding:14px 16px;">
+    <div style="font-size:22px">📊</div>
+    <div style="font-family:'Segoe UI',sans-serif;font-weight:700;color:#12283b;margin-top:4px">Export</div>
+    <div style="color:#4a627a;font-size:.86rem">Scopus CSV → Biblioshiny</div>
+  </div>
 </div>
 """,
-                unsafe_allow_html=True,
-            )
-            st.page_link(t["page"], label=f"Open {t['title']} →")
+    unsafe_allow_html=True,
+)
+
+st.markdown("#### Choose a module")
+
+# href = Streamlit page URL slug (filename without the numeric prefix / .py).
+TOOLS = [
+    {"href": "Data_Enrichment", "icon": "🛰", "title": "Data Enrichment",
+     "desc": "Title/DOI list → PubMed + OpenAlex + Crossref, merged per paper.",
+     "tag": "needs .xlsx · Sno · Clean Title · DOI"},
+    {"href": "Scopus_Format_Converter", "icon": "🛸", "title": "Scopus-format Converter",
+     "desc": "Enriched data → Biblioshiny / VOSviewer-ready Scopus CSV.",
+     "tag": "upload enriched .xlsx"},
+    {"href": "Convert_Citations", "icon": "📄", "title": "Convert Citations",
+     "desc": "PubMed (MEDLINE) or RIS export → clean, pipeline-ready sheet.",
+     "tag": "upload .txt / .nbib / .ris"},
+    {"href": "ICMR_Institute_Tagger", "icon": "🏛", "title": "ICMR Institute Tagger",
+     "desc": "Tag rows with their ICMR institute (former names, acronyms, multi-site).",
+     "tag": "sheet with affiliations"},
+    {"href": "Fuzzy_Title_Match", "icon": "🔭", "title": "Fuzzy Title Match",
+     "desc": "Match titles by similarity — reconcile two lists or find duplicates.",
+     "tag": "one or two title lists"},
+    {"href": "Merge_Sheets", "icon": "🧬", "title": "Merge Sheets",
+     "desc": "Join two sheets on matched column(s) — names can differ.",
+     "tag": "two .xlsx / .csv sheets"},
+]
+
+st.markdown(feature_cards_html(TOOLS), unsafe_allow_html=True)
 
 st.markdown("---")
-
 c1, c2 = st.columns([2, 1])
 with c1:
     st.markdown(
         "**New here?** Start with **Data Enrichment** — download its blank template, "
-        "fill in your papers, and upload. Or use **Convert Citations** first if your "
-        "data is a PubMed/RIS export, then feed the result into enrichment."
+        "fill in your papers, upload. Or use **Convert Citations** first if your data "
+        "is a PubMed/RIS export, then feed the result into enrichment."
     )
 with c2:
     st.download_button(
@@ -105,4 +99,4 @@ with c2:
         use_container_width=True,
     )
 
-st.caption("Jarvis Scholar · research preview · more modules coming online.")
+st.caption("Jarvis Scholar · research preview")

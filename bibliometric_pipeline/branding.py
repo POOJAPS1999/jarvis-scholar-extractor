@@ -1,12 +1,20 @@
 """
 branding.py
 ===========
-Shared visual identity for the Jarvis Scholar dashboard: the sci-fi CSS
-theme, an animated "arc-reactor" loading icon (a nod to Jarvis, built from
-scratch as inline SVG/CSS — no copyrighted assets), and blank-template
-generators so users can download a correctly-formatted upload file.
+Shared visual identity for the Jarvis Scholar dashboard.
 
-All strings are plain HTML/CSS injected via st.markdown(..., unsafe_allow_html=True).
+Design language (chosen with Pooja): a LIGHT "scientific lab" theme — pale
+ice-blue canvas, white panels with hairline borders and a soft cyan accent,
+a clean serif for body/subtext and a crisp sans for headings. Sci-fi but
+sophisticated, not pitch black.
+
+Exposes:
+  - THEME_CSS            global CSS (inject once per page)
+  - hero_html()          page hero with the arc-reactor mark
+  - reactor_loader_html() animated "JARVIS is working" loader
+  - feature_cards_html()  the clickable dashboard tile grid
+  - how_to_use()          a "How to use" step-by-step block for tool pages
+  - enrichment_template_bytes(), scopus_input_template_bytes()  blank templates
 """
 from __future__ import annotations
 
@@ -14,94 +22,111 @@ import io
 
 import pandas as pd
 
+_SANS = "'Segoe UI', 'Helvetica Neue', Arial, system-ui, sans-serif"
+_SERIF = "Georgia, 'Times New Roman', 'Iowan Old Style', serif"
+
 # ---------------------------------------------------------------------
-# Global theme CSS (injected once per page)
+# Global theme CSS
 # ---------------------------------------------------------------------
-THEME_CSS = """
+THEME_CSS = f"""
 <style>
-:root {
-  --js-cyan: #22d3ee;
-  --js-blue: #3b82f6;
-  --js-deep: #0a0f1e;
-  --js-panel: #111a30;
-  --js-line: rgba(34, 211, 238, 0.25);
-}
-.stApp {
+:root {{
+  --js-cyan: #0e7f9c;
+  --js-cyan-soft: #7fd3e6;
+  --js-indigo: #4f46e5;
+  --js-ink: #12283b;
+  --js-sub: #4a627a;
+  --js-line: #d6e3f2;
+  --js-panel: #ffffff;
+  --js-bg: #eff5fc;
+}}
+.stApp {{
   background:
-    radial-gradient(1200px 600px at 15% -10%, rgba(59,130,246,0.10), transparent 60%),
-    radial-gradient(900px 500px at 100% 0%, rgba(34,211,238,0.08), transparent 55%),
-    var(--js-deep);
-}
-/* Feature tiles */
-.js-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 16px; margin: 8px 0 4px; }
-.js-card {
-  position: relative; border: 1px solid var(--js-line); border-radius: 14px;
-  padding: 18px 18px 16px; background: linear-gradient(180deg, rgba(17,26,48,0.85), rgba(10,15,30,0.85));
-  box-shadow: 0 0 0 1px rgba(34,211,238,0.04), 0 10px 30px rgba(0,0,0,0.35);
-  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; height: 100%;
-}
-.js-card:hover { transform: translateY(-3px); border-color: var(--js-cyan);
-  box-shadow: 0 0 22px rgba(34,211,238,0.18), 0 14px 34px rgba(0,0,0,0.45); }
-.js-ic { font-size: 30px; line-height: 1; }
-.js-title { font-weight: 700; letter-spacing: .3px; margin: 8px 0 4px; color: #eaf6ff; font-size: 1.05rem; }
-.js-desc { color: #9fb4d4; font-size: .86rem; line-height: 1.4; }
-.js-tag { display:inline-block; margin-top:10px; font-size:.68rem; letter-spacing:.12em;
-  text-transform:uppercase; color: var(--js-cyan); border:1px solid var(--js-line);
-  border-radius: 999px; padding: 2px 9px; }
-.js-hero-sub { color:#9fb4d4; font-size:.95rem; letter-spacing:.02em; }
-hr { border-color: var(--js-line) !important; }
+    radial-gradient(1100px 520px at 12% -8%, rgba(79,70,229,0.06), transparent 60%),
+    radial-gradient(900px 460px at 100% 0%, rgba(14,127,156,0.08), transparent 55%),
+    var(--js-bg);
+}}
+/* Serif body / subtext, crisp sans headings */
+html, body, .stMarkdown, .stCaption, p, label, .stText, [data-testid="stMarkdownContainer"] {{
+  font-family: {_SERIF};
+}}
+h1, h2, h3, h4 {{ font-family: {_SANS}; letter-spacing: .2px; color: var(--js-ink); }}
+[data-testid="stCaptionContainer"], .stCaption p {{ color: var(--js-sub); font-family: {_SERIF}; }}
+
+/* Dashboard tile grid — the WHOLE card is a link */
+.js-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin: 10px 0 6px; }}
+.js-card {{
+  display: block; text-decoration: none; color: inherit;
+  position: relative; border: 1px solid var(--js-line); border-radius: 16px;
+  padding: 20px 20px 18px; background: var(--js-panel);
+  box-shadow: 0 1px 2px rgba(18,40,59,0.04), 0 8px 24px rgba(18,40,59,0.06);
+  transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease;
+  min-height: 172px;
+}}
+.js-card:hover {{ transform: translateY(-3px); border-color: var(--js-cyan);
+  box-shadow: 0 0 0 3px rgba(14,127,156,0.10), 0 14px 30px rgba(18,40,59,0.12); }}
+.js-ic-wrap {{ display:inline-flex; align-items:center; justify-content:center;
+  width:46px; height:46px; border-radius:12px; background:#e8f6fb;
+  border:1px solid var(--js-line); font-size:24px; margin-bottom:10px; }}
+.js-title {{ font-family:{_SANS}; font-weight:700; color:var(--js-ink); font-size:1.08rem; margin:2px 0 5px; }}
+.js-desc {{ font-family:{_SERIF}; color:var(--js-sub); font-size:.92rem; line-height:1.45; }}
+.js-tag {{ display:inline-block; margin-top:12px; font-family:{_SANS}; font-size:.7rem;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--js-cyan);
+  background:#e8f6fb; border:1px solid var(--js-line); border-radius:999px; padding:3px 10px; }}
+.js-cta {{ margin-top:12px; font-family:{_SANS}; font-weight:600; font-size:.86rem; color:var(--js-cyan); }}
+
+/* How-to-use steps */
+.js-how {{ border:1px solid var(--js-line); background:var(--js-panel); border-radius:14px; padding:6px 20px 14px; margin-top:8px; }}
+.js-step {{ display:flex; gap:14px; align-items:flex-start; padding:14px 0; border-bottom:1px solid #eef3f9; }}
+.js-step:last-child {{ border-bottom:none; }}
+.js-step-n {{ flex:0 0 auto; width:30px; height:30px; border-radius:50%; background:var(--js-cyan);
+  color:#fff; font-family:{_SANS}; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:.9rem; }}
+.js-step-ic {{ flex:0 0 auto; font-size:20px; margin-top:1px; width:26px; text-align:center; }}
+.js-step-b {{ flex:1; }}
+.js-step-t {{ font-family:{_SANS}; font-weight:600; color:var(--js-ink); font-size:.98rem; }}
+.js-step-d {{ font-family:{_SERIF}; color:var(--js-sub); font-size:.9rem; line-height:1.45; margin-top:2px; }}
+.js-shot {{ margin-top:8px; border:1px dashed var(--js-line); border-radius:10px; background:#f7fafe;
+  color:#8aa0b8; font-family:{_SANS}; font-size:.74rem; padding:9px 12px; }}
+
+.js-hero-sub {{ color:var(--js-sub); font-family:{_SERIF}; font-size:1rem; }}
+hr {{ border-color: var(--js-line) !important; }}
 </style>
 """
 
+
 # ---------------------------------------------------------------------
-# Animated arc-reactor loader
+# Animated arc-reactor loader (cyan HUD ring, works on the light canvas)
 # ---------------------------------------------------------------------
-def reactor_loader_html(label: str = "JARVIS is working…", size: int = 96) -> str:
-    """A small glowing, rotating 'arc reactor' loader. Two counter-rotating
-    rings, a pulsing core, and orbiting nodes — a cute Jarvis-style 'thinking'
-    indicator, drawn from scratch (no copyrighted imagery)."""
+def reactor_loader_html(label: str = "JARVIS is working…", size: int = 88) -> str:
     return f"""
 <div style="display:flex;align-items:center;gap:16px;margin:10px 0;">
   <svg width="{size}" height="{size}" viewBox="0 0 100 100" role="img" aria-label="loading">
     <defs>
       <radialGradient id="jsCore" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stop-color="#e6fbff"/>
-        <stop offset="45%" stop-color="#22d3ee"/>
-        <stop offset="100%" stop-color="#0e7490"/>
+        <stop offset="0%" stop-color="#ffffff"/><stop offset="45%" stop-color="#22c3e6"/>
+        <stop offset="100%" stop-color="#0e7f9c"/>
       </radialGradient>
-      <filter id="jsGlow" x="-50%" y="-50%" width="200%" height="200%">
-        <feGaussianBlur stdDeviation="2.2" result="b"/>
-        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>
     </defs>
-    <g filter="url(#jsGlow)">
-      <circle cx="50" cy="50" r="30" fill="none" stroke="#3b82f6" stroke-width="2"
-              stroke-dasharray="6 9" opacity="0.75">
-        <animateTransform attributeName="transform" type="rotate" from="0 50 50"
-                          to="360 50 50" dur="3.2s" repeatCount="indefinite"/>
-      </circle>
-      <circle cx="50" cy="50" r="22" fill="none" stroke="#22d3ee" stroke-width="2.4"
-              stroke-dasharray="26 12" stroke-linecap="round" opacity="0.9">
-        <animateTransform attributeName="transform" type="rotate" from="360 50 50"
-                          to="0 50 50" dur="1.8s" repeatCount="indefinite"/>
-      </circle>
-      <g>
-        <animateTransform attributeName="transform" type="rotate" from="0 50 50"
-                          to="360 50 50" dur="2.4s" repeatCount="indefinite"/>
-        <circle cx="50" cy="22" r="2.4" fill="#8be9ff"/>
-        <circle cx="78" cy="50" r="2.0" fill="#8be9ff"/>
-        <circle cx="50" cy="78" r="2.4" fill="#8be9ff"/>
-        <circle cx="22" cy="50" r="2.0" fill="#8be9ff"/>
-      </g>
-      <circle cx="50" cy="50" r="10" fill="url(#jsCore)">
-        <animate attributeName="r" values="9;11.5;9" dur="1.4s" repeatCount="indefinite"/>
-        <animate attributeName="opacity" values="0.85;1;0.85" dur="1.4s" repeatCount="indefinite"/>
-      </circle>
+    <circle cx="50" cy="50" r="31" fill="none" stroke="#4f46e5" stroke-width="2.2"
+            stroke-dasharray="6 9" opacity="0.55">
+      <animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="3.2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="50" cy="50" r="22" fill="none" stroke="#0e7f9c" stroke-width="2.6"
+            stroke-dasharray="26 12" stroke-linecap="round" opacity="0.95">
+      <animateTransform attributeName="transform" type="rotate" from="360 50 50" to="0 50 50" dur="1.8s" repeatCount="indefinite"/>
+    </circle>
+    <g>
+      <animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="2.4s" repeatCount="indefinite"/>
+      <circle cx="50" cy="23" r="2.4" fill="#22c3e6"/><circle cx="77" cy="50" r="2" fill="#22c3e6"/>
+      <circle cx="50" cy="77" r="2.4" fill="#22c3e6"/><circle cx="23" cy="50" r="2" fill="#22c3e6"/>
     </g>
+    <circle cx="50" cy="50" r="10" fill="url(#jsCore)">
+      <animate attributeName="r" values="9;11.5;9" dur="1.4s" repeatCount="indefinite"/>
+    </circle>
   </svg>
   <div>
-    <div style="color:#22d3ee;font-weight:700;letter-spacing:.06em;font-family:monospace;">{label}</div>
-    <div style="color:#7f97ba;font-size:.8rem;font-family:monospace;">standby · processing telemetry</div>
+    <div style="color:#0e7f9c;font-weight:700;font-family:{_SANS};">{label}</div>
+    <div style="color:#7f97ae;font-size:.82rem;font-family:{_SERIF};">standby · processing</div>
   </div>
 </div>
 """
@@ -109,17 +134,17 @@ def reactor_loader_html(label: str = "JARVIS is working…", size: int = 96) -> 
 
 def hero_html(title: str, tagline: str) -> str:
     return f"""
-<div style="display:flex;align-items:center;gap:18px;margin:2px 0 6px;">
-  <svg width="58" height="58" viewBox="0 0 100 100" aria-hidden="true">
+<div style="display:flex;align-items:center;gap:18px;margin:2px 0 8px;">
+  <svg width="56" height="56" viewBox="0 0 100 100" aria-hidden="true">
     <defs><radialGradient id="jsHeroCore" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#e6fbff"/><stop offset="55%" stop-color="#22d3ee"/>
-      <stop offset="100%" stop-color="#0e7490"/></radialGradient></defs>
-    <circle cx="50" cy="50" r="30" fill="none" stroke="#3b82f6" stroke-width="2" stroke-dasharray="5 8" opacity="0.7"/>
-    <circle cx="50" cy="50" r="21" fill="none" stroke="#22d3ee" stroke-width="2.5" stroke-dasharray="24 10" stroke-linecap="round"/>
+      <stop offset="0%" stop-color="#ffffff"/><stop offset="55%" stop-color="#22c3e6"/>
+      <stop offset="100%" stop-color="#0e7f9c"/></radialGradient></defs>
+    <circle cx="50" cy="50" r="31" fill="none" stroke="#4f46e5" stroke-width="2.2" stroke-dasharray="5 8" opacity="0.5"/>
+    <circle cx="50" cy="50" r="21" fill="none" stroke="#0e7f9c" stroke-width="2.6" stroke-dasharray="24 10" stroke-linecap="round"/>
     <circle cx="50" cy="50" r="9" fill="url(#jsHeroCore)"/>
   </svg>
   <div>
-    <div style="font-size:1.9rem;font-weight:800;letter-spacing:.5px;color:#eaf6ff;font-family:monospace;">{title}</div>
+    <div style="font-size:1.95rem;font-weight:800;letter-spacing:.4px;color:#12283b;font-family:{_SANS};">{title}</div>
     <div class="js-hero-sub">{tagline}</div>
   </div>
 </div>
@@ -127,11 +152,53 @@ def hero_html(title: str, tagline: str) -> str:
 
 
 # ---------------------------------------------------------------------
+# Dashboard clickable tile grid
+# ---------------------------------------------------------------------
+def feature_cards_html(tools: list) -> str:
+    """tools: list of dicts with keys href, icon, title, desc, tag.
+    The whole card is an <a> so clicking anywhere navigates to the tool."""
+    cards = []
+    for t in tools:
+        cards.append(f"""
+  <a class="js-card" href="{t['href']}" target="_self">
+    <div class="js-ic-wrap">{t['icon']}</div>
+    <div class="js-title">{t['title']}</div>
+    <div class="js-desc">{t['desc']}</div>
+    <div class="js-tag">{t['tag']}</div>
+    <div class="js-cta">Open {t['title']} →</div>
+  </a>""")
+    return f'<div class="js-grid">{"".join(cards)}</div>'
+
+
+# ---------------------------------------------------------------------
+# "How to use" step block (illustrated; real screenshots added later)
+# ---------------------------------------------------------------------
+def how_to_use(steps: list, shot_hint: bool = True):
+    """Render a 'How to use' section. `steps` is a list of (icon, title,
+    description) tuples. Call inside a Streamlit page (uses st)."""
+    import streamlit as st
+
+    st.markdown("### How to use this tool")
+    rows = []
+    for i, (icon, title, desc) in enumerate(steps, start=1):
+        shot = ('<div class="js-shot">🖼 Step screenshot coming soon</div>' if shot_hint else "")
+        rows.append(f"""
+  <div class="js-step">
+    <div class="js-step-n">{i}</div>
+    <div class="js-step-ic">{icon}</div>
+    <div class="js-step-b">
+      <div class="js-step-t">{title}</div>
+      <div class="js-step-d">{desc}</div>
+      {shot}
+    </div>
+  </div>""")
+    st.markdown(f'<div class="js-how">{"".join(rows)}</div>', unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------------
 # Blank upload templates
 # ---------------------------------------------------------------------
 def enrichment_template_bytes() -> bytes:
-    """Blank .xlsx with the exact columns the Data Enrichment tool needs,
-    plus two example rows the user can overwrite/delete."""
     df = pd.DataFrame({
         "Sno": [1, 2],
         "Clean Title": [
@@ -146,10 +213,6 @@ def enrichment_template_bytes() -> bytes:
     return buf.getvalue()
 
 
-# Columns the Scopus converter (export_scopus_csv.convert_row) actually reads
-# from an enriched dataset, in a sensible fill-in order. A user preparing data
-# by hand only needs these; anything blank is tolerated (left empty in the
-# Scopus output), but EID must be non-blank or Biblioshiny drops the row.
 SCOPUS_INPUT_COLUMNS = [
     "EID", "TITLE", "Clean Title", "Authors", "Author(s) ID (synthetic)",
     "YEAR", "Journal", "DOI", "Citations", "Source Link",
@@ -164,9 +227,6 @@ SCOPUS_INPUT_COLUMNS = [
 
 
 def scopus_input_template_bytes() -> bytes:
-    """Blank .xlsx with the columns the Scopus converter reads, plus one
-    worked example row showing the expected shape of each field (e.g. the
-    Author_Affiliation_Map JSON, semicolon-joined authors, a synthetic EID)."""
     example = {
         "EID": "2-s2.0-12345678901",
         "TITLE": "Circulating tumor DNA in neuroblastoma",
@@ -199,8 +259,7 @@ def scopus_input_template_bytes() -> bytes:
         "Fetch Issues": "",
         "Reconciliation Notes": "",
     }
-    df = pd.DataFrame([{c: example.get(c, "") for c in SCOPUS_INPUT_COLUMNS}])
-    df = df[SCOPUS_INPUT_COLUMNS]
+    df = pd.DataFrame([{c: example.get(c, "") for c in SCOPUS_INPUT_COLUMNS}])[SCOPUS_INPUT_COLUMNS]
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as xw:
         df.to_excel(xw, index=False, sheet_name="Scopus Converter Input")

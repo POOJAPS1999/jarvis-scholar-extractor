@@ -20,8 +20,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline.fuzzy_tools import cross_match, self_dedup
 from bibliometric_pipeline.ui_helpers import download_buttons, read_tabular_upload
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use
 
 st.set_page_config(page_title="Jarvis Scholar - Fuzzy Title Match", layout="wide")
+st.markdown(THEME_CSS, unsafe_allow_html=True)
 st.title("Fuzzy title match")
 st.caption(
     "Match titles by similarity — no OpenAlex/PubMed/Crossref lookups. "
@@ -73,7 +75,11 @@ if mode == "Compare two lists":
     col_b = _pick_title_column(df_b, "col_b", "titles in List B")
 
     if st.button("Run match", type="primary"):
-        result = cross_match(df_a[col_a].tolist(), df_b[col_b].tolist(), threshold=threshold)
+        _loader = st.empty()
+        _loader.markdown(reactor_loader_html("JARVIS is matching titles…"), unsafe_allow_html=True)
+        with st.spinner("Comparing every title in A against List B…"):
+            result = cross_match(df_a[col_a].tolist(), df_b[col_b].tolist(), threshold=threshold)
+        _loader.empty()
         n_matched = int((result["Matched"] == "Yes").sum())
         st.success(f"{n_matched} of {len(result)} titles in List A matched at ≥ {threshold}.")
         m = st.columns(3)
@@ -98,7 +104,11 @@ else:  # self-dedup
     col = _pick_title_column(df, "col_dedup")
 
     if st.button("Find duplicates", type="primary"):
-        result = self_dedup(df[col].tolist(), threshold=threshold)
+        _loader = st.empty()
+        _loader.markdown(reactor_loader_html("JARVIS is scanning for duplicates…"), unsafe_allow_html=True)
+        with st.spinner("Comparing every pair of titles… (this can take a moment on long lists)"):
+            result = self_dedup(df[col].tolist(), threshold=threshold)
+        _loader.empty()
         if result.empty:
             st.success(f"No near-duplicate pairs found at ≥ {threshold}.")
         else:
@@ -106,3 +116,18 @@ else:  # self-dedup
             st.success(f"Found {len(result)} near-duplicate pair(s) among {n_titles} titles.")
             st.dataframe(result, use_container_width=True, hide_index=True)
             download_buttons(result, stem="fuzzy_duplicates", key_prefix="dedup", sheet_name="Duplicates")
+
+st.markdown("---")
+how_to_use([
+    ("🔀", "Pick a mode",
+     "‘Compare two lists’ finds the best match in list B for each title in A. "
+     "‘Find duplicates in one list’ reports near-duplicate pairs within a single list."),
+    ("📤", "Upload your list(s)",
+     "Upload one .xlsx/.csv (dedup) or two (compare). Each just needs a column of titles."),
+    ("🎚", "Set the match threshold",
+     "Higher = stricter. 85 matches the pipeline’s auto-accept level; 75 is its ‘needs review’ floor."),
+    ("▶️", "Run it",
+     "Click the button. The JARVIS loader shows while it compares — long lists take a few seconds."),
+    ("⬇️", "Review & download",
+     "Check the matched/duplicate pairs and scores, then download as CSV or Excel."),
+])

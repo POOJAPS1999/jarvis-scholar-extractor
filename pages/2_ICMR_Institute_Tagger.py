@@ -24,8 +24,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline.icmr_institutes import resolve_all_icmr_institutes
 from bibliometric_pipeline.ui_helpers import download_buttons, read_tabular_upload
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use
 
 st.set_page_config(page_title="Jarvis Scholar - ICMR Tagger", layout="wide")
+st.markdown(THEME_CSS, unsafe_allow_html=True)
 st.title("ICMR institute tagger")
 st.caption(
     "Upload a sheet with affiliation columns and tag each row with its ICMR "
@@ -105,8 +107,12 @@ if st.button("Tag ICMR institutes", type="primary"):
             texts.extend(_per_author_texts(row.get("Author_Affiliation_Map")))
         return resolve_all_icmr_institutes(*texts)
 
+    _loader = st.empty()
+    _loader.markdown(reactor_loader_html("JARVIS is tagging ICMR institutes…"), unsafe_allow_html=True)
     out = df.copy()
-    out[_TAG_COL] = out.apply(resolve_row, axis=1)
+    with st.spinner("Resolving affiliations to ICMR institutes…"):
+        out[_TAG_COL] = out.apply(resolve_row, axis=1)
+    _loader.empty()
 
     # Summary stats (same accounting as the CLI script)
     col = out[_TAG_COL]
@@ -136,3 +142,17 @@ if st.button("Tag ICMR institutes", type="primary"):
 
     stem = os.path.splitext(uploaded.name)[0] + "_icmr_tagged"
     download_buttons(out, stem=stem, key_prefix="icmr", sheet_name="ICMR Tagged")
+
+st.markdown("---")
+how_to_use([
+    ("📤", "Upload a sheet with affiliations",
+     "Any .xlsx/.csv that has affiliation text — usually a pipeline output or a curated Included_studies file."),
+    ("🏷", "Pick the affiliation column(s)",
+     "Select which columns hold affiliation text. If the file has an Author_Affiliation_Map column, keep that box ticked for best coverage."),
+    ("▶️", "Run the tagging",
+     "Click ‘Tag ICMR institutes’. The loader shows while affiliations are resolved to current institute names (handling former names & acronyms)."),
+    ("📊", "Read the summary",
+     "See how many rows have an institute, how many mention 2+, and the per-institute breakdown."),
+    ("⬇️", "Download the tagged sheet",
+     "A new ‘ICMR Institute (Current Name)’ column is added; download as CSV or Excel."),
+])

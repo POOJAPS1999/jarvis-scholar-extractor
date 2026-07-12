@@ -5,7 +5,6 @@ rapidfuzz
 pycountry
 python-dotenv
 streamlit
-biopython
 rispy
 
 # Phase 1 backend (FastAPI + Celery/Redis + Postgres) - merged in here

@@ -18,7 +18,7 @@ import streamlit as st
 _HERE = os.path.dirname(os.path.abspath(__file__))
 import sys
 sys.path.insert(0, os.path.dirname(_HERE))
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, enrichment_template_bytes
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, enrichment_template_bytes, how_to_use
 
 try:
     _secret_url = st.secrets.get("API_BASE_URL")
@@ -329,3 +329,17 @@ if uploaded is not None:
             st.rerun()
 else:
     st.info("Upload a file to get started, or download the template above first.")
+
+st.markdown("---")
+how_to_use([
+    ("📄", "Get your input file right",
+     "You need an .xlsx with three columns: Sno, Clean Title, DOI. Download the blank template above if you’re not sure."),
+    ("📤", "Upload & (optionally) tick ICMR mode",
+     "Upload the file. Turn on ‘ICMR mode’ only if you want ICMR institute + author-flag columns added."),
+    ("🛰", "Start extraction",
+     "Click ‘Start extraction’. It runs on the hosted backend — the JARVIS loader tracks progress and the job survives closing the tab."),
+    ("✅", "Review low-confidence matches",
+     "Accept, reject, or retry-with-a-corrected-DOI. Accept/Reject are recorded instantly — only a corrected-DOI retry re-runs that row."),
+    ("⬇️", "Download results",
+     "Grab the enriched Excel. For Biblioshiny/VOSviewer, pass it through the Scopus-format Converter tool."),
+])

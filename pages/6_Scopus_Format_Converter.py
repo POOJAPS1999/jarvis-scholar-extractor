@@ -25,7 +25,9 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from export_scopus_csv import convert_row, SCOPUS_COLUMNS, PROVENANCE_COLUMNS
-from bibliometric_pipeline.branding import THEME_CSS, scopus_input_template_bytes
+from bibliometric_pipeline.branding import (
+    THEME_CSS, scopus_input_template_bytes, reactor_loader_html, how_to_use,
+)
 from bibliometric_pipeline.ui_helpers import read_tabular_upload
 
 st.set_page_config(page_title="Jarvis Scholar - Scopus Converter", layout="wide")
@@ -113,7 +115,11 @@ if st.button("Convert to Scopus format", type="primary"):
         work = work[mask_keep]
 
     # Convert every row through the SAME function the in-flow export uses.
-    out_rows = [convert_row(rec) for rec in work.to_dict("records")]
+    _loader = st.empty()
+    _loader.markdown(reactor_loader_html("JARVIS is building the Scopus CSV…"), unsafe_allow_html=True)
+    with st.spinner("Reformatting rows to Scopus columns…"):
+        out_rows = [convert_row(rec) for rec in work.to_dict("records")]
+    _loader.empty()
     out_df = pd.DataFrame(out_rows)
     for c in _ALL_OUT_COLS:
         if c not in out_df.columns:
@@ -150,3 +156,17 @@ if st.button("Convert to Scopus format", type="primary"):
         file_name=f"{stem}.csv",
         mime="text/csv",
     )
+
+st.markdown("---")
+how_to_use([
+    ("🛰", "Enrich first (if you haven’t)",
+     "This tool converts an already-enriched dataset. If you only have a title/DOI list, run Data Enrichment first."),
+    ("📤", "Upload the enriched file",
+     "Upload the enriched .xlsx (columns like TITLE, Authors, DOI, Citations, EID…). A blank input template is available above."),
+    ("🚫", "Choose what to exclude",
+     "Rows rejected in manual review, or marked duplicate, are left out by default so they don’t reach your analysis."),
+    ("▶️", "Convert",
+     "Click ‘Convert to Scopus format’. The loader shows while rows are reformatted to the 44 Scopus columns."),
+    ("⬇️", "Download for Biblioshiny / VOSviewer",
+     "Download the CSV and import it into bibliometrix/Biblioshiny or VOSviewer (Scopus format)."),
+])

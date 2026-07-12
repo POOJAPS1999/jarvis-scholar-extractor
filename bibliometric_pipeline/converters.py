@@ -95,6 +95,54 @@ def _authors_from_medline(rec: dict) -> str:
     return "; ".join(a.strip() for a in au if a and a.strip())
 
 
+def _parse_medline(text: str) -> List[dict]:
+    """Pure-Python MEDLINE parser (no Biopython / no C extensions — Biopython
+    was pulling native code that segfaulted the Streamlit Cloud container).
+
+    MEDLINE format: each line is 'TAG - value' where TAG is left-justified in
+    the first 4 columns and the separator '- ' sits at columns 4-5.
+    Continuation lines for a long value are indented with spaces and carry no
+    tag. A blank line ends a record. Repeated tags (AU, MH, AID, IS, ...)
+    collect into a list, matching Biopython's Bio.Medline.parse output shape,
+    so the downstream field-mapping is unchanged.
+    """
+    records: List[dict] = []
+    cur: dict = {}
+    last_key = None
+
+    def _add(d, key, val):
+        if key in d:
+            if isinstance(d[key], list):
+                d[key].append(val)
+            else:
+                d[key] = [d[key], val]
+        else:
+            d[key] = val
+
+    for line in text.splitlines():
+        if not line.strip():
+            if cur:
+                records.append(cur)
+                cur, last_key = {}, None
+            continue
+        # A tag line has a non-blank 4-char tag and '- ' at columns 4-5.
+        if len(line) >= 6 and line[4:6] == "- " and line[:4].strip():
+            key = line[:4].strip()
+            val = line[6:].strip()
+            _add(cur, key, val)
+            last_key = key
+        elif last_key is not None:
+            # continuation of the previous value
+            add = line.strip()
+            if isinstance(cur[last_key], list):
+                cur[last_key][-1] = f"{cur[last_key][-1]} {add}".strip()
+            else:
+                cur[last_key] = f"{cur[last_key]} {add}".strip()
+    if cur:
+        records.append(cur)
+    return records
+
+
 def medline_to_dataframe(file_or_bytes) -> pd.DataFrame:
     """Parse a PubMed MEDLINE-format export into a DataFrame.
 
@@ -102,30 +150,28 @@ def medline_to_dataframe(file_or_bytes) -> pd.DataFrame:
     with pipeline columns (Sno, Clean Title, DOI) first, then rich
     bibliographic columns.
     """
-    from Bio import Medline  # imported lazily so the package imports without Biopython
-
     text = _as_text(file_or_bytes)
-    records = list(Medline.parse(io.StringIO(text)))
+    records = _parse_medline(text)
 
     rows = []
     for i, rec in enumerate(records, start=1):
-        title = (rec.get("TI") or "").strip()
+        title = _scalar(rec.get("TI"))
         rows.append({
             "Sno": i,
             "Clean Title": title,
             "DOI": _doi_from_medline(rec),
-            "PMID": (rec.get("PMID") or "").strip(),
+            "PMID": _scalar(rec.get("PMID")),
             "Title": title,
             "Authors": _authors_from_medline(rec),
-            "Journal": (rec.get("JT") or rec.get("TA") or "").strip(),
+            "Journal": _scalar(rec.get("JT")) or _scalar(rec.get("TA")),
             "Year": _year_from_medline(rec),
-            "Volume": (rec.get("VI") or "").strip(),
-            "Issue": (rec.get("IP") or "").strip(),
-            "Pages": (rec.get("PG") or "").strip(),
-            "Abstract": (rec.get("AB") or "").strip(),
+            "Volume": _scalar(rec.get("VI")),
+            "Issue": _scalar(rec.get("IP")),
+            "Pages": _scalar(rec.get("PG")),
+            "Abstract": _scalar(rec.get("AB")),
             "MeSH Terms": _join_list(rec.get("MH")),
             "Publication Type": _join_list(rec.get("PT")),
-            "ISSN": (rec.get("IS") or "").strip(),
+            "ISSN": _scalar(rec.get("IS")),
         })
 
     if not rows:
@@ -135,6 +181,17 @@ def medline_to_dataframe(file_or_bytes) -> pd.DataFrame:
 
     df = pd.DataFrame(rows)
     return _reorder_pipeline_first(df)
+
+
+def _scalar(v) -> str:
+    """Return a single stripped string from a MEDLINE field that may be a
+    string, a list (repeated tag, e.g. multiple ISSNs), or None. Takes the
+    first element of a list."""
+    if v is None:
+        return ""
+    if isinstance(v, list):
+        v = v[0] if v else ""
+    return str(v).strip()
 
 
 def _year_from_medline(rec: dict) -> str:
