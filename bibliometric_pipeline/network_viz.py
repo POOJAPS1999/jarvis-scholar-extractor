@@ -1,13 +1,18 @@
 """
 network_viz.py
 ==============
-Interactive network rendering for the Scientometrics maps (Phase 2), using
-networkx for layout + Plotly for an interactive figure (zoom / pan / hover,
-and Plotly's built-in "download as PNG"). Also a VOSviewer-style density
-overlay for the keyword map.
+VOSviewer-style network rendering for the Scientometrics maps.
 
-Input is the (items, edges, extra) structure from networks.py. Large
-networks are reduced to the top-N nodes by weight for a readable map.
+Matches the VOSviewer "network visualization" look:
+  - cluster colours from a VOSviewer-like palette
+  - node circles sized by weight
+  - LABELS centred on nodes with font size proportional to weight (the
+    signature VOSviewer trait — the biggest terms get the biggest labels)
+  - faint straight edges, clean white background, equal aspect ratio
+
+Interactive figure via Plotly (zoom/pan/hover + built-in PNG), a matching
+static matplotlib PNG for explicit download, and a VOSviewer-style density
+overlay. Input is the (items, edges, extra) structure from networks.py.
 """
 from __future__ import annotations
 
@@ -15,10 +20,13 @@ from typing import Dict, Tuple
 
 import numpy as np
 
-# Jarvis Scholar cluster palette (colour-blind-friendly-ish, distinct hues)
-_PALETTE = ["#0e7f9c", "#4f46e5", "#d8572a", "#1d9e75", "#c0392b",
-            "#b8860b", "#7d3c98", "#2c7fb8", "#d81b60", "#5f6a6a"]
+# VOSviewer-like cluster palette (distinct hues, cluster 1 = red, 2 = green, …)
+_PALETTE = ["#d62728", "#2ca02c", "#1f77b4", "#e6b800", "#9467bd",
+            "#17becf", "#ff7f0e", "#e377c2", "#8c564b", "#7f7f7f",
+            "#bcbd22", "#393b79"]
 _BG = "#ffffff"
+_EDGE = "rgba(150,165,185,0.30)"
+_LABEL_INK = "#1a1a1a"
 
 
 def _weight_of(extra_row: dict) -> float:
@@ -51,7 +59,6 @@ def _top_subgraph(items, edges, extra, top_n):
     for (a, b), w in edges.items():
         if a in keep and b in keep:
             G.add_edge(a, b, weight=float(w))
-    # drop isolates so the layout isn't dominated by floating dots
     G.remove_nodes_from([n for n in list(G.nodes) if G.degree(n) == 0])
     return G
 
@@ -60,8 +67,14 @@ def _layout(G, seed=42):
     import networkx as nx
     if G.number_of_nodes() == 0:
         return {}
-    k = 1.8 / np.sqrt(max(1, G.number_of_nodes()))
-    return nx.spring_layout(G, weight="weight", k=k, seed=seed, iterations=120)
+    # Kamada-Kawai gives the smooth, spread, organic look VOSviewer has;
+    # fall back to spring layout if it can't converge.
+    try:
+        pos = nx.kamada_kawai_layout(G, weight="weight")
+    except Exception:
+        k = 1.8 / np.sqrt(max(1, G.number_of_nodes()))
+        pos = nx.spring_layout(G, weight="weight", k=k, seed=seed, iterations=150)
+    return pos
 
 
 def _communities(G):
@@ -75,11 +88,18 @@ def _communities(G):
         return {n: 0 for n in G.nodes}
 
 
+def _norm(weights):
+    w = np.asarray(weights, dtype=float)
+    if len(w) == 0 or w.max() == w.min():
+        return np.zeros(len(w))
+    return (w - w.min()) / (w.max() - w.min())
+
+
 def network_figure(items: Dict[str, str], edges: Dict[Tuple[str, str], int],
                    extra: Dict[str, dict], title: str = "", top_n: int = 60,
-                   label_top: int = 30, weight_name: str = "Documents"):
-    """Interactive Plotly network of the top-N nodes by weight, coloured by
-    detected community, sized by weight. Returns a plotly Figure."""
+                   label_top: int = 45, weight_name: str = "Documents"):
+    """Interactive VOSviewer-style network (Plotly): cluster-coloured circles
+    sized by weight, labels centred on nodes with weight-scaled font size."""
     import plotly.graph_objects as go
 
     G = _top_subgraph(items, edges, extra, top_n)
@@ -93,66 +113,67 @@ def network_figure(items: Dict[str, str], edges: Dict[Tuple[str, str], int],
 
     pos = _layout(G)
     comm = _communities(G)
-    weights = np.array([G.nodes[n]["weight"] for n in G.nodes], dtype=float)
-    wmin, wmax = weights.min(), weights.max()
-    sizes = 12 + 34 * ((weights - wmin) / (wmax - wmin) if wmax > wmin else np.zeros_like(weights))
+    nodes = list(G.nodes)
+    wn = _norm([G.nodes[n]["weight"] for n in nodes])
+    wn_by = {n: wn[i] for i, n in enumerate(nodes)}
+    sizes = 10 + 52 * wn          # circle diameter (px)
 
-    # edges
-    emax = max((d["weight"] for *_e, d in G.edges(data=True)), default=1)
-    edge_traces = []
-    for a, b, d in G.edges(data=True):
-        x0, y0 = pos[a]
-        x1, y1 = pos[b]
-        edge_traces.append(go.Scatter(
-            x=[x0, x1, None], y=[y0, y1, None], mode="lines",
-            line=dict(width=0.4 + 3.0 * d["weight"] / emax, color="rgba(120,140,165,0.35)"),
-            hoverinfo="skip", showlegend=False))
+    # faint edges (single trace)
+    ex, ey = [], []
+    for a, b in G.edges():
+        ex += [pos[a][0], pos[b][0], None]
+        ey += [pos[a][1], pos[b][1], None]
+    edge_trace = go.Scatter(x=ex, y=ey, mode="lines",
+                            line=dict(width=0.7, color=_EDGE), hoverinfo="skip", showlegend=False)
 
-    # rank nodes by weight to decide which get text labels
-    order = sorted(G.nodes, key=lambda n: G.nodes[n]["weight"], reverse=True)
-    label_set = set(order[:label_top])
-    nx_, ny, ntext, nhover, ncolor, nlabel = [], [], [], [], [], []
-    for n in G.nodes:
-        x, y = pos[n]
-        nx_.append(x)
-        ny.append(y)
-        lbl = str(G.nodes[n]["label"])
-        nlabel.append(lbl if n in label_set else "")
-        ntext.append(lbl if n in label_set else "")
-        nhover.append(f"<b>{lbl}</b><br>{weight_name}: {int(G.nodes[n]['weight'])}"
-                      f"<br>Citations: {G.nodes[n]['score']:.0f}<br>Links: {G.degree(n)}")
-        ncolor.append(_PALETTE[comm.get(n, 0) % len(_PALETTE)])
-
+    # node circles (no text on the marker — labels are annotations)
+    nx_, ny, colors, hover = [], [], [], []
+    for n in nodes:
+        nx_.append(pos[n][0])
+        ny.append(pos[n][1])
+        colors.append(_PALETTE[comm.get(n, 0) % len(_PALETTE)])
+        hover.append(f"<b>{G.nodes[n]['label']}</b><br>{weight_name}: {int(G.nodes[n]['weight'])}"
+                     f"<br>Cluster: {comm.get(n, 0) + 1}<br>Links: {G.degree(n)}")
     node_trace = go.Scatter(
-        x=nx_, y=ny, mode="markers+text", text=ntext, textposition="top center",
-        textfont=dict(size=10, color="#12283b"),
-        hovertext=nhover, hoverinfo="text",
-        marker=dict(size=sizes, color=ncolor, line=dict(width=1.2, color="white"), opacity=0.92),
+        x=nx_, y=ny, mode="markers", hovertext=hover, hoverinfo="text",
+        marker=dict(size=sizes, color=colors, opacity=0.72, line=dict(width=1, color="white")),
         showlegend=False)
 
-    fig = go.Figure(edge_traces + [node_trace])
+    # labels as annotations — font size ∝ weight, centred on the node
+    order = sorted(nodes, key=lambda n: G.nodes[n]["weight"], reverse=True)[:label_top]
+    ann = []
+    for n in order:
+        fs = 9 + 20 * wn_by[n]     # 9 → 29 px
+        ann.append(dict(x=pos[n][0], y=pos[n][1], text=str(G.nodes[n]["label"]),
+                        showarrow=False, xanchor="center", yanchor="middle",
+                        font=dict(size=fs, color=_LABEL_INK, family="Arial")))
+    ann.append(dict(text="Jarvis Scholar", x=1, y=0, xref="paper", yref="paper",
+                    showarrow=False, xanchor="right", yanchor="bottom",
+                    font=dict(size=10, color="#b8c6d8")))
+
+    fig = go.Figure([edge_trace, node_trace])
     fig.update_layout(
         title=dict(text=title, x=0.01, xanchor="left", font=dict(size=15, color="#12283b")),
-        height=560, paper_bgcolor=_BG, plot_bgcolor=_BG, margin=dict(l=10, r=10, t=44, b=10),
-        xaxis=dict(visible=False), yaxis=dict(visible=False), hovermode="closest",
-        annotations=[dict(text="Jarvis Scholar", x=1, y=0, xref="paper", yref="paper",
-                          showarrow=False, font=dict(size=10, color="#b8c6d8"),
-                          xanchor="right", yanchor="bottom")],
+        height=640, paper_bgcolor=_BG, plot_bgcolor=_BG, margin=dict(l=6, r=6, t=44, b=6),
+        hovermode="closest", annotations=ann,
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False, scaleanchor="x", scaleratio=1),  # equal aspect → round circles
     )
     return fig
 
 
-def network_png(items, edges, extra, title="", top_n: int = 60, label_top: int = 30,
+def network_png(items, edges, extra, title="", top_n: int = 60, label_top: int = 45,
                 weight_name: str = "Documents") -> bytes:
-    """Static matplotlib render of the same top-N network, for an explicit
-    'Download PNG' button (same layout/colours as the interactive figure)."""
+    """Static VOSviewer-style PNG (matplotlib) — same look as the interactive
+    figure, for an explicit download button."""
     import io
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from matplotlib.patches import Circle
 
     G = _top_subgraph(items, edges, extra, top_n)
-    fig, ax = plt.subplots(figsize=(10, 8), dpi=150)
+    fig, ax = plt.subplots(figsize=(11, 9), dpi=150)
     if G.number_of_nodes() == 0:
         ax.text(0.5, 0.5, "Not enough connected nodes at these settings.",
                 ha="center", va="center", color="#4a627a")
@@ -160,23 +181,31 @@ def network_png(items, edges, extra, title="", top_n: int = 60, label_top: int =
     else:
         pos = _layout(G)
         comm = _communities(G)
-        weights = np.array([G.nodes[n]["weight"] for n in G.nodes], dtype=float)
-        wmin, wmax = weights.min(), weights.max()
-        sizes = 120 + 900 * ((weights - wmin) / (wmax - wmin) if wmax > wmin else np.zeros_like(weights))
-        emax = max((d["weight"] for *_e, d in G.edges(data=True)), default=1)
-        for a, b, d in G.edges(data=True):
-            x0, y0 = pos[a]
-            x1, y1 = pos[b]
-            ax.plot([x0, x1], [y0, y1], color="#8a9cb5", alpha=0.28,
-                    linewidth=0.3 + 2.4 * d["weight"] / emax, zorder=1)
-        colors = [_PALETTE[comm.get(n, 0) % len(_PALETTE)] for n in G.nodes]
-        ax.scatter([pos[n][0] for n in G.nodes], [pos[n][1] for n in G.nodes],
-                   s=sizes, c=colors, edgecolors="white", linewidths=1.1, zorder=3, alpha=0.92)
-        order = sorted(G.nodes, key=lambda n: G.nodes[n]["weight"], reverse=True)[:label_top]
+        nodes = list(G.nodes)
+        wn = _norm([G.nodes[n]["weight"] for n in nodes])
+        wn_by = {n: wn[i] for i, n in enumerate(nodes)}
+
+        # edges
+        for a, b in G.edges():
+            ax.plot([pos[a][0], pos[b][0]], [pos[a][1], pos[b][1]],
+                    color="#96a5b9", alpha=0.30, linewidth=0.7, zorder=1)
+        # circles (data-coordinate radii so they scale with the layout)
+        xs = np.array([pos[n][0] for n in nodes])
+        ys = np.array([pos[n][1] for n in nodes])
+        span = max(xs.max() - xs.min(), ys.max() - ys.min(), 1e-6)
+        for n in nodes:
+            r = (0.010 + 0.055 * wn_by[n]) * span
+            ax.add_patch(Circle(pos[n], r, facecolor=_PALETTE[comm.get(n, 0) % len(_PALETTE)],
+                                edgecolor="white", linewidth=1.0, alpha=0.72, zorder=3))
+        # labels — font size ∝ weight, centred
+        order = sorted(nodes, key=lambda n: G.nodes[n]["weight"], reverse=True)[:label_top]
         for n in order:
-            ax.text(pos[n][0], pos[n][1], str(G.nodes[n]["label"]), fontsize=8,
-                    ha="center", va="center", color="#12283b", zorder=4,
-                    fontweight="bold")
+            ax.text(pos[n][0], pos[n][1], str(G.nodes[n]["label"]),
+                    fontsize=6.5 + 12 * wn_by[n], ha="center", va="center",
+                    color=_LABEL_INK, zorder=4)
+        ax.set_xlim(xs.min() - 0.12 * span, xs.max() + 0.12 * span)
+        ax.set_ylim(ys.min() - 0.12 * span, ys.max() + 0.12 * span)
+        ax.set_aspect("equal")
         ax.axis("off")
     if title:
         ax.set_title(title, color="#12283b", fontsize=14, fontweight="bold", loc="left")
@@ -189,26 +218,27 @@ def network_png(items, edges, extra, title="", top_n: int = 60, label_top: int =
     return buf.getvalue()
 
 
-def density_figure(items, edges, extra, title="", top_n: int = 120, label_top: int = 40):
+def density_figure(items, edges, extra, title="", top_n: int = 120, label_top: int = 45):
     """VOSviewer-style density overlay: a smooth heat field where terms
-    cluster densely, with the top labels on top."""
+    cluster densely, with the top labels on top (weight-scaled)."""
     import plotly.graph_objects as go
 
     G = _top_subgraph(items, edges, extra, top_n)
     if G.number_of_nodes() == 0:
         fig = go.Figure()
-        fig.add_annotation(text="Not enough connected nodes for a density map.",
-                           showarrow=False, font=dict(size=13, color="#4a627a"))
+        fig.add_annotation(text="Not enough connected nodes at these settings — try a larger dataset "
+                           "or lower the threshold.", showarrow=False, font=dict(size=13, color="#4a627a"))
         fig.update_layout(height=420)
         return fig
     pos = _layout(G)
-    xs = np.array([pos[n][0] for n in G.nodes])
-    ys = np.array([pos[n][1] for n in G.nodes])
-    ws = np.array([G.nodes[n]["weight"] for n in G.nodes], dtype=float)
+    nodes = list(G.nodes)
+    xs = np.array([pos[n][0] for n in nodes])
+    ys = np.array([pos[n][1] for n in nodes])
+    ws = np.array([G.nodes[n]["weight"] for n in nodes], dtype=float)
+    wn = _norm(ws)
 
-    # gaussian density field on a grid
-    gx = np.linspace(xs.min() - 0.1, xs.max() + 0.1, 120)
-    gy = np.linspace(ys.min() - 0.1, ys.max() + 0.1, 120)
+    gx = np.linspace(xs.min() - 0.1, xs.max() + 0.1, 130)
+    gy = np.linspace(ys.min() - 0.1, ys.max() + 0.1, 130)
     GX, GY = np.meshgrid(gx, gy)
     span = max(xs.max() - xs.min(), ys.max() - ys.min(), 1e-3)
     bw = 0.06 * span
@@ -216,21 +246,23 @@ def density_figure(items, edges, extra, title="", top_n: int = 120, label_top: i
     for x, y, w in zip(xs, ys, ws):
         Z += w * np.exp(-((GX - x) ** 2 + (GY - y) ** 2) / (2 * bw ** 2))
 
-    heat = go.Heatmap(x=gx, y=gy, z=Z, colorscale="YlGnBu", reversescale=False,
-                      showscale=False, zsmooth="best", opacity=0.9)
-    order = sorted(G.nodes, key=lambda n: G.nodes[n]["weight"], reverse=True)[:label_top]
-    lab = go.Scatter(x=[pos[n][0] for n in order], y=[pos[n][1] for n in order],
-                     mode="text", text=[str(G.nodes[n]["label"]) for n in order],
-                     textfont=dict(size=10, color="#0b3b52"), hoverinfo="text",
-                     hovertext=[f"{G.nodes[n]['label']} ({int(G.nodes[n]['weight'])})" for n in order],
-                     showlegend=False)
+    # VOSviewer density colours: blue (low) → green → yellow → red (high)
+    scale = [[0.0, "#2b4b8f"], [0.35, "#2ca02c"], [0.7, "#e6d800"], [1.0, "#d62728"]]
+    heat = go.Heatmap(x=gx, y=gy, z=Z, colorscale=scale, showscale=False, zsmooth="best")
+    order = sorted(range(len(nodes)), key=lambda i: ws[i], reverse=True)[:label_top]
+    lab = go.Scatter(
+        x=[xs[i] for i in order], y=[ys[i] for i in order], mode="text",
+        text=[str(G.nodes[nodes[i]]["label"]) for i in order],
+        textfont=dict(size=[9 + 16 * wn[i] for i in order], color="#111111"),
+        hoverinfo="text", hovertext=[f"{G.nodes[nodes[i]]['label']} ({int(ws[i])})" for i in order],
+        showlegend=False)
     fig = go.Figure([heat, lab])
     fig.update_layout(
         title=dict(text=title, x=0.01, xanchor="left", font=dict(size=15, color="#12283b")),
-        height=560, paper_bgcolor=_BG, plot_bgcolor=_BG, margin=dict(l=10, r=10, t=44, b=10),
-        xaxis=dict(visible=False), yaxis=dict(visible=False),
+        height=640, paper_bgcolor=_BG, plot_bgcolor=_BG, margin=dict(l=6, r=6, t=44, b=6),
+        xaxis=dict(visible=False), yaxis=dict(visible=False, scaleanchor="x", scaleratio=1),
         annotations=[dict(text="Jarvis Scholar", x=1, y=0, xref="paper", yref="paper",
-                          showarrow=False, font=dict(size=10, color="#7f97ae"),
-                          xanchor="right", yanchor="bottom")],
+                          showarrow=False, xanchor="right", yanchor="bottom",
+                          font=dict(size=10, color="#7f97ae"))],
     )
     return fig
