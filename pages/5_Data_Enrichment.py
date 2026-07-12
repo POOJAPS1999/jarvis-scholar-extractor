@@ -313,19 +313,28 @@ if uploaded is not None:
                     columns=["Match Status", "Count"],
                 ))
 
-            st.download_button(
-                "Download enriched Excel",
+            dcol1, dcol2 = st.columns(2)
+            dcol1.download_button(
+                "⬇ Download enriched Excel",
                 data=output_bytes,
                 file_name=f"bibliometric_output_{job_id}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
             )
-
-            st.info(
-                "Need a Scopus-format CSV for Biblioshiny / VOSviewer? Download the "
-                "enriched Excel above, then open the **Scopus-format Converter** tool "
-                "from the dashboard and upload it there.",
-                icon="🛸",
-            )
+            # Scopus-format CSV, generated inline from the enriched output (no
+            # extra click, no page reset) — same converter as the standalone tool.
+            try:
+                from export_scopus_csv import to_scopus_csv_bytes
+                scopus_bytes = to_scopus_csv_bytes(out_df)
+                dcol2.download_button(
+                    "⬇ Download Scopus-format CSV (Biblioshiny / VOSviewer)",
+                    data=scopus_bytes,
+                    file_name=f"scopus_format_{job_id}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+            except Exception as e:
+                dcol2.caption(f"Scopus CSV unavailable: {e}")
             brand_footer(note=f"{done}/{total} records enriched")
 
         if st.button("Start a new job (different file)", key=f"reset_{job_id}"):

@@ -397,6 +397,34 @@ def convert_row(row):
     return out
 
 
+def to_scopus_csv_bytes(df, drop_rejected=True):
+    """Convert an enriched-output DataFrame straight to Scopus-format CSV
+    bytes (utf-8-sig), reusing convert_row exactly. Rows rejected in manual
+    review, or marked duplicate, are excluded by default so they don't reach
+    the downstream analysis. Shared by the standalone converter tool and the
+    Data Enrichment results page."""
+    import io as _io
+
+    work = df.copy()
+    if drop_rejected:
+        keep = pd.Series(True, index=work.index)
+        if "Match Status" in work.columns:
+            keep &= ~work["Match Status"].astype(str).str.startswith("Rejected")
+        if "Dedup Status" in work.columns:
+            keep &= ~work["Dedup Status"].astype(str).str.startswith("Duplicate")
+        work = work[keep]
+    rows = [convert_row(rec) for rec in work.to_dict("records")]
+    out = pd.DataFrame(rows)
+    cols = SCOPUS_COLUMNS + PROVENANCE_COLUMNS
+    for c in cols:
+        if c not in out.columns:
+            out[c] = ""
+    out = out[cols]
+    buf = _io.StringIO()
+    out.to_csv(buf, index=False, quoting=csv.QUOTE_MINIMAL)
+    return buf.getvalue().encode("utf-8-sig")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--input", required=True, help="Path to the pipeline's internal output .xlsx")
