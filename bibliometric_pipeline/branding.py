@@ -240,6 +240,36 @@ def feature_cards_html(tools: list) -> str:
     return f'<div class="js-grid">{"".join(cards)}</div>'
 
 
+def tool_card_html(t: dict) -> str:
+    """A single module card's VISUAL (a <div>, not a link) — navigation is
+    done by a client-side st.page_link rendered under it, so the session (and
+    login) survives page changes. Non-navigating on its own."""
+    pills = "".join(f'<span class="js-pill">{p}</span>' for p in t.get("pills", []))
+    tint = t.get("tint", "#e8f6fb")
+    fg = t.get("fg", "#0e7f9c")
+    return f"""
+<div class="js-tool-card" style="min-height:148px;">
+  <div class="js-tool-head">
+    <div class="js-sq" style="background:{tint};color:{fg}">{t['icon']}</div>
+    <div>
+      <div class="js-tool-t">{t['title']}</div>
+      <div class="js-tool-d">{t['desc']}</div>
+    </div>
+  </div>
+  <div class="js-pills">{pills}</div>
+</div>"""
+
+
+def pipeline_card_html(s: dict) -> str:
+    """A single pipeline-strip card VISUAL (div; navigation via st.page_link)."""
+    return f"""
+<div class="js-pipe-card" style="min-height:96px;">
+  <div class="js-sq" style="background:{s.get('tint', '#e8f6fb')};color:{s.get('fg', '#0e7f9c')}">{s['icon']}</div>
+  <div class="js-pipe-t">{s['title']}</div>
+  <div class="js-pipe-d">{s['desc']}</div>
+</div>"""
+
+
 def pipeline_cards_html(stages: list) -> str:
     """Top pipeline strip. Each stage dict: href, icon, title, desc, tint, fg."""
     cards = []
