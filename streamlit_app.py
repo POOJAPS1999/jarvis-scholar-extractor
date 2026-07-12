@@ -78,6 +78,9 @@ TOOLS = [
     {"href": "Merge_Sheets", "icon": "🧬", "title": "Merge Sheets",
      "desc": "Join two sheets on matched column(s) — names can differ.",
      "pills": ["TWO .XLSX / .CSV SHEETS"], "tint": "#e6f6f6", "fg": "#0e8a8a"},
+    {"href": "AI_Figure_Interpreter", "icon": "🤖", "title": "AI Figure Interpreter",
+     "desc": "Upload any figure or map → a plain-language interpretation for your paper.",
+     "pills": ["UPLOAD PNG / JPG"], "tint": "#f3e9fb", "fg": "#7d3c98"},
 ]
 
 if query:

@@ -34,6 +34,7 @@ from typing import List, Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
+import requests
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -163,6 +164,62 @@ def login(body: LoginBody):
         session.commit()
         pub = _public_user(u)
     return {"ok": True, **pub}
+
+
+_FIGURE_PROMPT = (
+    "You are a scientometrics and bibliometrics expert helping a researcher write up their "
+    "analysis. Interpret this figure in clear, plain language suitable for a paper's Results/"
+    "Discussion. Cover: (1) what the figure shows and how to read it, (2) the main patterns — "
+    "the largest/most central items, distinct clusters or groups and what they seem to represent, "
+    "and any notable outliers, and (3) 2–4 concrete takeaways a reader should draw. Be specific "
+    "and reference actual labels/values you can see. Do not invent numbers you cannot see. Keep it "
+    "concise (roughly 150–250 words). {context}"
+)
+
+
+@app.post("/ai/interpret-figure")
+async def interpret_figure(file: UploadFile = File(...), context: str = Form("")):
+    """Vision-model interpretation of a bibliometric figure. Uses the
+    Anthropic API key from ANTHROPIC_API_KEY (never hardcoded). Returns a
+    plain-language interpretation."""
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
+        raise HTTPException(400, "AI figure interpretation isn't configured yet — set an "
+                                 "ANTHROPIC_API_KEY environment variable on the server.")
+    raw = await file.read()
+    if len(raw) > 5 * 1024 * 1024:
+        raise HTTPException(400, "Image too large (max 5 MB).")
+    media = (file.content_type or "").lower()
+    if media in ("image/jpg", "image/jpeg"):
+        media = "image/jpeg"
+    elif media not in ("image/png", "image/gif", "image/webp"):
+        media = "image/png"
+    import base64 as _b64
+    b64 = _b64.b64encode(raw).decode()
+    model = os.environ.get("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest")
+    ctx = f"Context provided by the user about this figure: {context.strip()}" if context.strip() else ""
+    body = {
+        "model": model,
+        "max_tokens": 900,
+        "messages": [{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": media, "data": b64}},
+            {"type": "text", "text": _FIGURE_PROMPT.format(context=ctx)},
+        ]}],
+    }
+    try:
+        r = requests.post("https://api.anthropic.com/v1/messages",
+                          headers={"x-api-key": key, "anthropic-version": "2023-06-01",
+                                   "content-type": "application/json"},
+                          json=body, timeout=90)
+    except Exception as e:
+        raise HTTPException(502, f"Could not reach the AI service: {e}")
+    if not r.ok:
+        raise HTTPException(502, f"AI service error {r.status_code}: {r.text[:300]}")
+    data = r.json()
+    text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text").strip()
+    if not text:
+        raise HTTPException(502, "AI service returned no interpretation.")
+    return {"interpretation": text, "model": model}
 
 
 @app.get("/auth/registrations")

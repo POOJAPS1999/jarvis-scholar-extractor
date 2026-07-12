@@ -261,12 +261,13 @@ if st.button("Generate map", type="primary", key="genmap"):
                         config={"displaylogo": False,
                                 "toImageButtonOptions": {"format": "png", "filename": "jarvis_network",
                                                          "scale": 2}})
+        map_png = None
         dl1, dl2 = st.columns(2)
         if not density:
+            map_png = nv.network_png(items, edges, extra, title=map_choice, top_n=top_n, weight_name=weight_name)
             with dl1:
-                st.download_button("⬇ Download PNG", key="netpng",
-                    data=nv.network_png(items, edges, extra, title=map_choice, top_n=top_n, weight_name=weight_name),
-                    file_name="jarvis_network.png", mime="image/png")
+                st.download_button("⬇ Download PNG", key="netpng", data=map_png,
+                                   file_name="jarvis_network.png", mime="image/png")
         # VOSviewer .map + .net as a zip
         mb, nb = nw.vosviewer_bytes(items, edges, extra)
         zbuf = io.BytesIO()
@@ -276,9 +277,37 @@ if st.button("Generate map", type="primary", key="genmap"):
         with dl2:
             st.download_button("⬇ VOSviewer files (.map + .net)", data=zbuf.getvalue(),
                                file_name="jarvis_vosviewer_network.zip", mime="application/zip", key="netvos")
+        # stash the PNG so the "Interpret with AI" button (below) can reuse it
+        if map_png is not None:
+            st.session_state["_last_map_png"] = map_png
+            st.session_state["_last_map_label"] = map_choice
     except Exception as e:
         _l.empty()
         st.error(f"Could not build this map: {e}")
+
+# Integrated AI interpretation of the most recently generated map
+if st.session_state.get("_last_map_png"):
+    with st.expander("🤖 Interpret this map with AI", expanded=False):
+        st.caption("Sends the map image to a vision model for a plain-language reading "
+                   "(needs ANTHROPIC_API_KEY configured on the server).")
+        if st.button("Interpret with AI", key="mapai"):
+            from bibliometric_pipeline.ai import interpret_figure
+            _ai = st.empty()
+            _ai.markdown(reactor_loader_html("JARVIS is reading the map…"), unsafe_allow_html=True)
+            try:
+                with st.spinner("Interpreting…"):
+                    txt = interpret_figure(
+                        st.session_state["_last_map_png"],
+                        context=f"A {st.session_state.get('_last_map_label','network')} map from a "
+                                f"bibliometric analysis of {len(df):,} publications (VOSviewer-style: "
+                                f"node size = weight, colour = cluster).",
+                        filename="map.png", mime="image/png")
+                _ai.empty()
+                st.write(txt)
+                st.caption("AI-generated — verify against the map before quoting in a manuscript.")
+            except Exception as e:
+                _ai.empty()
+                st.error(str(e))
 
 # --- Strategic thematic map (Phase 3) ---
 st.header("10 · Strategic thematic map")
