@@ -42,7 +42,7 @@ import io
 
 from bibliometric_pipeline import config
 from export_scopus_csv import convert_row, SCOPUS_COLUMNS, PROVENANCE_COLUMNS
-from .models import init_db, engine, Job, new_job_id
+from .models import init_db, engine, Job, User, new_job_id
 from .celery_app import celery_app
 from .tasks import run_extraction_job
 from . import storage
@@ -56,6 +56,130 @@ app = FastAPI(title="Jarvis Scholar API", version="0.1.0-phase1")
 @app.on_event("startup")
 def on_startup():
     init_db()
+
+
+# ---------------------------------------------------------------------
+# Auth (password accounts) — passwords hashed with stdlib PBKDF2 (no native
+# deps). Each new signup is also POSTed to REGISTRATION_WEBHOOK_URL (e.g. a
+# Google Apps Script that appends to a Sheet), best-effort.
+# ---------------------------------------------------------------------
+import base64
+import hashlib
+import hmac
+import secrets
+import json as _json
+import urllib.request
+from datetime import datetime, timezone
+
+
+def _hash_password(pw: str) -> str:
+    salt = secrets.token_bytes(16)
+    iters = 200_000
+    dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), salt, iters)
+    return f"pbkdf2${iters}${base64.b64encode(salt).decode()}${base64.b64encode(dk).decode()}"
+
+
+def _verify_password(pw: str, stored: str) -> bool:
+    try:
+        _algo, iters, salt_b64, hash_b64 = stored.split("$")
+        salt = base64.b64decode(salt_b64)
+        expected = base64.b64decode(hash_b64)
+        dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), salt, int(iters))
+        return hmac.compare_digest(dk, expected)
+    except Exception:
+        return False
+
+
+def _post_registration_webhook(payload: dict):
+    url = os.environ.get("REGISTRATION_WEBHOOK_URL")
+    if not url:
+        return
+    try:
+        req = urllib.request.Request(
+            url, data=_json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=5)
+    except Exception:
+        pass  # never let a webhook failure break signup
+
+
+class SignupBody(BaseModel):
+    email: str
+    password: str
+    name: str = ""
+    last_name: str = ""
+    institution: str = ""
+    role: str = ""
+    designation: str = ""
+
+
+class LoginBody(BaseModel):
+    email: str
+    password: str
+
+
+def _public_user(u: User) -> dict:
+    return {"email": u.email, "name": u.name, "last_name": u.last_name,
+            "institution": u.institution, "role": u.role, "designation": u.designation}
+
+
+@app.post("/auth/signup")
+def signup(body: SignupBody):
+    email = (body.email or "").strip().lower()
+    if "@" not in email or "." not in email:
+        raise HTTPException(400, "Please enter a valid email address.")
+    if len(body.password or "") < 6:
+        raise HTTPException(400, "Password must be at least 6 characters.")
+    with Session(engine) as session:
+        if session.exec(select(User).where(User.email == email)).first():
+            raise HTTPException(409, "An account with this email already exists — please log in.")
+        u = User(email=email, name=body.name.strip(), last_name=body.last_name.strip(),
+                 institution=body.institution.strip(), role=body.role.strip(),
+                 designation=body.designation.strip(),
+                 password_hash=_hash_password(body.password))
+        session.add(u)
+        session.commit()
+        session.refresh(u)
+        pub = _public_user(u)
+        created = u.created_at.isoformat() if u.created_at else ""
+    _post_registration_webhook({**pub, "created_at": created})
+    return {"ok": True, **pub}
+
+
+@app.post("/auth/login")
+def login(body: LoginBody):
+    email = (body.email or "").strip().lower()
+    with Session(engine) as session:
+        u = session.exec(select(User).where(User.email == email)).first()
+        if not u or not _verify_password(body.password or "", u.password_hash):
+            raise HTTPException(401, "Wrong email or password.")
+        u.last_login = datetime.now(timezone.utc)
+        session.add(u)
+        session.commit()
+        pub = _public_user(u)
+    return {"ok": True, **pub}
+
+
+@app.get("/auth/registrations")
+def export_registrations(key: str = ""):
+    """Download all registrations as CSV. Protected by the ADMIN_KEY env var."""
+    admin = os.environ.get("ADMIN_KEY")
+    if not admin or key != admin:
+        raise HTTPException(403, "Forbidden — pass ?key=<ADMIN_KEY>.")
+    import csv
+    with Session(engine) as session:
+        users = session.exec(select(User)).all()
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["email", "name", "last_name", "institution", "role", "designation",
+                "created_at", "last_login"])
+    for u in users:
+        w.writerow([u.email, u.name, u.last_name, u.institution, u.role, u.designation,
+                    u.created_at.isoformat() if u.created_at else "",
+                    u.last_login.isoformat() if u.last_login else ""])
+    return StreamingResponse(io.BytesIO(buf.getvalue().encode("utf-8-sig")),
+                             media_type="text/csv",
+                             headers={"Content-Disposition": 'attachment; filename="registrations.csv"'})
 
 
 def _job_to_dict(job: Job) -> dict:

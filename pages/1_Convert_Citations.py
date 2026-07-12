@@ -22,6 +22,9 @@ from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_t
 
 st.set_page_config(page_title="Jarvis Scholar - Convert Citations", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
+from bibliometric_pipeline.auth import require_login, sidebar_account
+require_login()
+sidebar_account()
 st.title("Convert citations to CSV / Excel")
 st.caption(
     "Upload a PubMed (MEDLINE .txt/.nbib) or RIS (.ris) export and get back a "

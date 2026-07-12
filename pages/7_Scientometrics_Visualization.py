@@ -30,6 +30,9 @@ from bibliometric_pipeline.ui_helpers import download_buttons, read_tabular_uplo
 
 st.set_page_config(page_title="Jarvis Scholar - Scientometrics", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
+from bibliometric_pipeline.auth import require_login, sidebar_account
+require_login()
+sidebar_account()
 st.title("Scientometrics visualization")
 st.caption(
     "Upload an enriched dataset and get Biblioshiny-style tables and charts. "

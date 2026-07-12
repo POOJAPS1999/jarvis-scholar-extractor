@@ -17,9 +17,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from bibliometric_pipeline.branding import (
     THEME_CSS, hero_html, feature_cards_html, enrichment_template_bytes,
 )
+from bibliometric_pipeline.auth import require_login, sidebar_account
 
 st.set_page_config(page_title="Jarvis Scholar", layout="wide", page_icon="🛰")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
+require_login()
+sidebar_account()
 
 st.markdown(
     hero_html("Jarvis Scholar",

@@ -32,6 +32,9 @@ from bibliometric_pipeline.ui_helpers import read_tabular_upload
 
 st.set_page_config(page_title="Jarvis Scholar - Scopus Converter", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
+from bibliometric_pipeline.auth import require_login, sidebar_account
+require_login()
+sidebar_account()
 st.title("Scopus-format converter")
 st.caption(
     "Turn an already-enriched dataset into a Scopus-format CSV for Biblioshiny "

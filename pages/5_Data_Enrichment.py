@@ -34,6 +34,9 @@ REQUIRED_COLUMNS = ["Sno", "Clean Title", "DOI"]
 
 st.set_page_config(page_title="Jarvis Scholar - Data Enrichment", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
+from bibliometric_pipeline.auth import require_login, sidebar_account
+require_login()
+sidebar_account()
 st.title("Data Enrichment")
 st.caption(
     "Upload a title/DOI list → get back PubMed + OpenAlex + Crossref enriched data. "

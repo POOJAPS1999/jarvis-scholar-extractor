@@ -29,6 +29,9 @@ from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_t
 
 st.set_page_config(page_title="Jarvis Scholar - ICMR Tagger", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
+from bibliometric_pipeline.auth import require_login, sidebar_account
+require_login()
+sidebar_account()
 st.title("ICMR institute tagger")
 st.caption(
     "Upload a sheet with affiliation columns and tag each row with its ICMR "

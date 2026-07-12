@@ -24,6 +24,9 @@ from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_t
 
 st.set_page_config(page_title="Jarvis Scholar - Fuzzy Title Match", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
+from bibliometric_pipeline.auth import require_login, sidebar_account
+require_login()
+sidebar_account()
 st.title("Fuzzy title match")
 st.caption(
     "Match titles by similarity — no OpenAlex/PubMed/Crossref lookups. "

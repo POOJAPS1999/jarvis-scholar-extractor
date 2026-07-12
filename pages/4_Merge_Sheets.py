@@ -20,6 +20,9 @@ from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_t
 
 st.set_page_config(page_title="Jarvis Scholar - Merge Sheets", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
+from bibliometric_pipeline.auth import require_login, sidebar_account
+require_login()
+sidebar_account()
 st.title("Merge two sheets")
 st.caption(
     "Upload two spreadsheets, pick the column(s) to match on (names can differ), "

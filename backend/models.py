@@ -70,6 +70,21 @@ class Job(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=_utcnow)
 
 
+class User(SQLModel, table=True):
+    """Registered app user. New table -> auto-created by create_all (no
+    migration needed, unlike adding a column to an existing table)."""
+    id: str = Field(default_factory=_new_id, primary_key=True)
+    email: str = Field(index=True)            # unique-by-convention (checked in code)
+    name: str = ""
+    last_name: str = ""
+    institution: str = ""
+    role: str = ""                            # Faculty / Student / PhD scholar / Researcher / ...
+    designation: str = ""
+    password_hash: str = ""                   # pbkdf2$iterations$salt$hash (stdlib, no native deps)
+    created_at: datetime = Field(default_factory=_utcnow)
+    last_login: datetime = Field(default_factory=_utcnow)
+
+
 def init_db():
     SQLModel.metadata.create_all(engine)
 
