@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from bibliometric_pipeline import scientometrics as sci
 from bibliometric_pipeline import charts
 from bibliometric_pipeline import networks as nw
+from bibliometric_pipeline import icmr_tables as it
 from bibliometric_pipeline.branding import (
     THEME_CSS, reactor_loader_html, how_to_use, brand_footer,
 )
@@ -70,7 +71,8 @@ except Exception as e:
 c1, c2 = st.columns([3, 1])
 c1.write(f"**{len(df):,}** records · **{len(df.columns)}** columns loaded.")
 icmr_mode = c2.toggle("ICMR mode", value=False,
-                      help="ICMR-specific breakdowns (institute/division tables) — added in a later phase.")
+                      help="Adds ICMR-specific tables (institute benchmarking, divisions, leadership, "
+                           "mandate fidelity, international partners) — needs an ICMR-tagged, enriched dataset.")
 top_n = st.slider("Rows to show in ‘top N’ tables", 5, 30, 15)
 
 def _safe(fn, default):
@@ -105,9 +107,11 @@ if _failed:
     st.warning("Some sections could not be computed for this file (the rest are shown below): "
                + "; ".join(f"{k}" for k in _failed))
 
-if icmr_mode:
-    st.info("ICMR mode is on. ICMR-specific institute/division tables arrive in a later phase; "
-            "the generic analysis below already runs on your ICMR dataset.", icon="🏛")
+if icmr_mode and not it.has_required(df):
+    st.warning(
+        "ICMR mode is on, but this dataset can't produce the ICMR tables yet — it needs an ICMR "
+        "**institute column** (run the ICMR Institute Tagger, or enrich with ICMR mode) **and** a "
+        "`Citations` column. The generic analysis below still runs.", icon="🏛")
 
 # --- Dataset overview ---
 st.header("1 · Dataset overview")
@@ -287,6 +291,50 @@ else:
         "top_funders", "fund")
     st.dataframe(funders, use_container_width=True, hide_index=True)
     download_buttons(funders, stem="top_funders", key_prefix="fn", sheet_name="Funders")
+
+# --- ICMR institute analysis (ICMR mode only) ---
+if icmr_mode and it.has_required(df):
+    st.header("12 · ICMR institute analysis")
+    st.caption("ICMR-specific tables (matches the ICMR bibliometric results document).")
+    _li = st.empty()
+    _li.markdown(reactor_loader_html("JARVIS is building the ICMR tables…"), unsafe_allow_html=True)
+    with st.spinner("Computing institute-level bibliometrics…"):
+        t3 = it.institute_benchmarking(df)
+        t4_summary, _ = it.division_summary(df)
+        t5, t5_overall = it.leadership_vs_contribution(df)
+        t8 = it.mandate_fidelity(df)
+        t10 = it.international_partners_by_institute(df)
+    _li.empty()
+
+    st.markdown("**Table 3 · Institute-level bibliometric benchmarking** (top 15 by volume)")
+    st.dataframe(t3, use_container_width=True, hide_index=True)
+    download_buttons(t3, stem="icmr_T3_benchmarking", key_prefix="it3", sheet_name="Table 3")
+
+    st.markdown("**Table 4 · Publications by inferred ICMR HQ scientific division**")
+    st.dataframe(t4_summary, use_container_width=True, hide_index=True)
+    download_buttons(t4_summary, stem="icmr_T4_divisions", key_prefix="it4", sheet_name="Table 4")
+
+    st.markdown("**Table 5 · Leadership vs. contribution, by institute**")
+    if not t5.empty:
+        st.caption("Corpus-wide: " + ", ".join(f"{k} — {v}" for k, v in t5_overall.items()))
+        st.dataframe(t5, use_container_width=True, hide_index=True)
+        download_buttons(t5, stem="icmr_T5_leadership", key_prefix="it5", sheet_name="Table 5")
+    else:
+        st.caption("Needs ‘Corresponding Author from ICMR’ and ‘Any Author from ICMR’ columns.")
+
+    st.markdown("**Table 8 · Mandate fidelity, by institute** (top 15 by fidelity %)")
+    if not t8.empty:
+        st.dataframe(t8, use_container_width=True, hide_index=True)
+        download_buttons(t8, stem="icmr_T8_mandate", key_prefix="it8", sheet_name="Table 8")
+    else:
+        st.caption("No institute-vision matches found for this dataset.")
+
+    st.markdown("**Table 10 · Leading international partner countries, by disease-focus institute**")
+    if not t10.empty:
+        st.dataframe(t10, use_container_width=True, hide_index=True)
+        download_buttons(t10, stem="icmr_T10_partners", key_prefix="it10", sheet_name="Table 10")
+    else:
+        st.caption("Needs an ‘All Country’ column.")
 
 brand_footer(note=f"{len(df):,} records analysed")
 st.markdown("---")
