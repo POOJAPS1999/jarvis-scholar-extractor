@@ -289,7 +289,7 @@ if st.button("Generate map", type="primary", key="genmap"):
 if st.session_state.get("_last_map_png"):
     with st.expander("🤖 Interpret this map with AI", expanded=False):
         st.caption("Sends the map image to a vision model for a plain-language reading "
-                   "(needs ANTHROPIC_API_KEY configured on the server).")
+                   "(needs a free GEMINI_API_KEY or an ANTHROPIC_API_KEY on the server).")
         if st.button("Interpret with AI", key="mapai"):
             from bibliometric_pipeline.ai import interpret_figure
             _ai = st.empty()

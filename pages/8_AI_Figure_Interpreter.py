@@ -70,5 +70,5 @@ how_to_use([
     ("✅", "Review & use",
      "Read the interpretation, download it as text, and adapt it for your manuscript — always verify it against the figure."),
 ])
-st.caption("Note: figures are sent to the AI provider for interpretation. Needs an ANTHROPIC_API_KEY "
-           "configured on the server.")
+st.caption("Note: figures are sent to the AI provider for interpretation. Needs a (free) GEMINI_API_KEY "
+           "or an ANTHROPIC_API_KEY configured on the server.")

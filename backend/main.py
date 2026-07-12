@@ -177,15 +177,49 @@ _FIGURE_PROMPT = (
 )
 
 
+def _anthropic_vision(key, media, b64, prompt):
+    model = os.environ.get("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest")
+    body = {"model": model, "max_tokens": 900, "messages": [{"role": "user", "content": [
+        {"type": "image", "source": {"type": "base64", "media_type": media, "data": b64}},
+        {"type": "text", "text": prompt}]}]}
+    r = requests.post("https://api.anthropic.com/v1/messages",
+                      headers={"x-api-key": key, "anthropic-version": "2023-06-01",
+                               "content-type": "application/json"}, json=body, timeout=90)
+    if not r.ok:
+        raise HTTPException(502, f"Anthropic error {r.status_code}: {r.text[:300]}")
+    data = r.json()
+    text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text").strip()
+    return text, f"anthropic:{model}"
+
+
+def _gemini_vision(key, media, b64, prompt):
+    """Google Gemini — has a free tier (Google AI Studio key)."""
+    model = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+    body = {"contents": [{"parts": [
+        {"inline_data": {"mime_type": media, "data": b64}},
+        {"text": prompt}]}]}
+    r = requests.post(url, json=body, timeout=90)
+    if not r.ok:
+        raise HTTPException(502, f"Gemini error {r.status_code}: {r.text[:300]}")
+    data = r.json()
+    text = ""
+    for cand in data.get("candidates", []):
+        for part in cand.get("content", {}).get("parts", []):
+            text += part.get("text", "")
+    return text.strip(), f"gemini:{model}"
+
+
 @app.post("/ai/interpret-figure")
 async def interpret_figure(file: UploadFile = File(...), context: str = Form("")):
-    """Vision-model interpretation of a bibliometric figure. Uses the
-    Anthropic API key from ANTHROPIC_API_KEY (never hardcoded). Returns a
-    plain-language interpretation."""
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key:
-        raise HTTPException(400, "AI figure interpretation isn't configured yet — set an "
-                                 "ANTHROPIC_API_KEY environment variable on the server.")
+    """Vision-model interpretation of a bibliometric figure. Uses whichever
+    provider is configured: GEMINI_API_KEY (free tier) or ANTHROPIC_API_KEY.
+    Keys are read from the environment, never hardcoded."""
+    gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not (gemini_key or anthropic_key):
+        raise HTTPException(400, "AI figure interpretation isn't configured — set a (free) "
+                                 "GEMINI_API_KEY, or an ANTHROPIC_API_KEY, on the server.")
     raw = await file.read()
     if len(raw) > 5 * 1024 * 1024:
         raise HTTPException(400, "Image too large (max 5 MB).")
@@ -196,27 +230,17 @@ async def interpret_figure(file: UploadFile = File(...), context: str = Form("")
         media = "image/png"
     import base64 as _b64
     b64 = _b64.b64encode(raw).decode()
-    model = os.environ.get("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest")
     ctx = f"Context provided by the user about this figure: {context.strip()}" if context.strip() else ""
-    body = {
-        "model": model,
-        "max_tokens": 900,
-        "messages": [{"role": "user", "content": [
-            {"type": "image", "source": {"type": "base64", "media_type": media, "data": b64}},
-            {"type": "text", "text": _FIGURE_PROMPT.format(context=ctx)},
-        ]}],
-    }
+    prompt = _FIGURE_PROMPT.format(context=ctx)
     try:
-        r = requests.post("https://api.anthropic.com/v1/messages",
-                          headers={"x-api-key": key, "anthropic-version": "2023-06-01",
-                                   "content-type": "application/json"},
-                          json=body, timeout=90)
+        if gemini_key:          # prefer the free provider if configured
+            text, model = _gemini_vision(gemini_key, media, b64, prompt)
+        else:
+            text, model = _anthropic_vision(anthropic_key, media, b64, prompt)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(502, f"Could not reach the AI service: {e}")
-    if not r.ok:
-        raise HTTPException(502, f"AI service error {r.status_code}: {r.text[:300]}")
-    data = r.json()
-    text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text").strip()
     if not text:
         raise HTTPException(502, "AI service returned no interpretation.")
     return {"interpretation": text, "model": model}
