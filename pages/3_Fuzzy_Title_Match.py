@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline.fuzzy_tools import cross_match, self_dedup
 from bibliometric_pipeline.ui_helpers import download_buttons, read_tabular_upload
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer
 
 st.set_page_config(page_title="Jarvis Scholar - Fuzzy Title Match", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -117,6 +117,7 @@ else:  # self-dedup
             st.dataframe(result, use_container_width=True, hide_index=True)
             download_buttons(result, stem="fuzzy_duplicates", key_prefix="dedup", sheet_name="Duplicates")
 
+brand_footer()
 st.markdown("---")
 how_to_use([
     ("🔀", "Pick a mode",

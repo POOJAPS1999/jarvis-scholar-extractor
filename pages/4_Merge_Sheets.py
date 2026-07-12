@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline.sheet_merge import merge_sheets, JOIN_TYPES
 from bibliometric_pipeline.ui_helpers import download_buttons
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer
 
 st.set_page_config(page_title="Jarvis Scholar - Merge Sheets", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -108,6 +108,7 @@ if st.button("Merge", type="primary"):
     st.subheader("Preview")
     st.dataframe(merged.head(50), use_container_width=True, hide_index=True)
     download_buttons(merged, stem="merged_sheets", key_prefix="merge", sheet_name="Merged")
+    brand_footer(note=f"{summary['rows_out']:,} rows merged")
 
 st.markdown("---")
 how_to_use([

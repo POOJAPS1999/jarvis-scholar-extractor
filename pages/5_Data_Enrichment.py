@@ -18,7 +18,7 @@ import streamlit as st
 _HERE = os.path.dirname(os.path.abspath(__file__))
 import sys
 sys.path.insert(0, os.path.dirname(_HERE))
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, enrichment_template_bytes, how_to_use
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, enrichment_template_bytes, how_to_use, brand_footer
 
 try:
     _secret_url = st.secrets.get("API_BASE_URL")
@@ -323,6 +323,7 @@ if uploaded is not None:
                 "from the dashboard and upload it there.",
                 icon="🛸",
             )
+            brand_footer(note=f"{done}/{total} records enriched")
 
         if st.button("Start a new job (different file)", key=f"reset_{job_id}"):
             del st.session_state[job_key]

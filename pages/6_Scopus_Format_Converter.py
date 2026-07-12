@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from export_scopus_csv import convert_row, SCOPUS_COLUMNS, PROVENANCE_COLUMNS
 from bibliometric_pipeline.branding import (
-    THEME_CSS, scopus_input_template_bytes, reactor_loader_html, how_to_use,
+    THEME_CSS, scopus_input_template_bytes, reactor_loader_html, how_to_use, brand_footer,
 )
 from bibliometric_pipeline.ui_helpers import read_tabular_upload
 
@@ -156,6 +156,7 @@ if st.button("Convert to Scopus format", type="primary"):
         file_name=f"{stem}.csv",
         mime="text/csv",
     )
+    brand_footer(note=f"{len(out_df):,} rows → Scopus format")
 
 st.markdown("---")
 how_to_use([

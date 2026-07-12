@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline.converters import medline_to_dataframe, ris_to_dataframe
 from bibliometric_pipeline.ui_helpers import download_buttons
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer
 
 st.set_page_config(page_title="Jarvis Scholar - Convert Citations", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -112,6 +112,7 @@ st.dataframe(df.head(50), use_container_width=True, hide_index=True)
 
 stem = os.path.splitext(uploaded.name)[0] + "_converted"
 download_buttons(df, stem=stem, key_prefix="convert", sheet_name="Converted")
+brand_footer(note=f"{len(df):,} records converted")
 
 st.caption(
     "Tip: the first three columns (`Sno`, `Clean Title`, `DOI`) are exactly "

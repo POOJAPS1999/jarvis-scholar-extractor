@@ -132,6 +132,29 @@ def reactor_loader_html(label: str = "JARVIS is working…", size: int = 88) -> 
 """
 
 
+def brand_footer(note: str = ""):
+    """Small 'Generated with Jarvis Scholar' watermark for the bottom of any
+    output block (Biblioshiny-style provenance mark). Call inside a page."""
+    import streamlit as st
+    from datetime import date
+    extra = f" · {note}" if note else ""
+    st.markdown(
+        f"<div style='margin:10px 0 2px;color:#9fb0c4;font-family:{_SANS};font-size:.75rem;'>"
+        f"🛰 Generated with <b>Jarvis Scholar</b> · {date.today().isoformat()}{extra}</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def watermark_chart(chart, text: str = "Jarvis Scholar"):
+    """Overlay a faint 'Jarvis Scholar' mark on an Altair chart (top-right),
+    the way Biblioshiny stamps its plots."""
+    import altair as alt
+    return chart.properties(
+        title=alt.TitleParams(text=" ", subtitle=text, subtitleColor="#b8c6d8",
+                              subtitleFontSize=10, subtitleFontStyle="italic", anchor="end"),
+    )
+
+
 def hero_html(title: str, tagline: str) -> str:
     return f"""
 <div style="display:flex;align-items:center;gap:18px;margin:2px 0 8px;">

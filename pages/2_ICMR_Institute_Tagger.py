@@ -23,8 +23,9 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline.icmr_institutes import resolve_all_icmr_institutes
+from bibliometric_pipeline import icmr_tables as it
 from bibliometric_pipeline.ui_helpers import download_buttons, read_tabular_upload
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer
 
 st.set_page_config(page_title="Jarvis Scholar - ICMR Tagger", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -142,6 +143,61 @@ if st.button("Tag ICMR institutes", type="primary"):
 
     stem = os.path.splitext(uploaded.name)[0] + "_icmr_tagged"
     download_buttons(out, stem=stem, key_prefix="icmr", sheet_name="ICMR Tagged")
+
+    # ---- Auto-generated ICMR bibliometric tables (3, 4, 5, 8, 10) ----
+    st.markdown("---")
+    st.subheader("ICMR bibliometric tables")
+    if not it.has_required(out):
+        st.info(
+            "To auto-generate the ICMR analysis tables (institute benchmarking, "
+            "divisions, leadership, mandate fidelity, international partners), upload "
+            "an **enriched** dataset that also has a `Citations` column (and ideally "
+            "Open Access, Collaboration Type, author-from-ICMR flags, All Country, "
+            "keywords). This affiliation-only sheet doesn't have them.",
+            icon="ℹ️",
+        )
+    else:
+        _l = st.empty()
+        _l.markdown(reactor_loader_html("JARVIS is building the ICMR tables…"), unsafe_allow_html=True)
+        with st.spinner("Computing institute-level bibliometrics…"):
+            t3 = it.institute_benchmarking(out)
+            t4_summary, t4_ref = it.division_summary(out)
+            t5, t5_overall = it.leadership_vs_contribution(out)
+            t8 = it.mandate_fidelity(out)
+            t10 = it.international_partners_by_institute(out)
+        _l.empty()
+
+        st.markdown("**Table 3 · Institute-level bibliometric benchmarking** (top 15 by volume)")
+        st.dataframe(t3, use_container_width=True, hide_index=True)
+        download_buttons(t3, stem=stem + "_T3_benchmarking", key_prefix="t3", sheet_name="Table 3")
+
+        st.markdown("**Table 4 · Publications by inferred ICMR HQ scientific division**")
+        st.dataframe(t4_summary, use_container_width=True, hide_index=True)
+        download_buttons(t4_summary, stem=stem + "_T4_divisions", key_prefix="t4", sheet_name="Table 4")
+
+        st.markdown("**Table 5 · Leadership vs. contribution, by institute** (top 15 by volume)")
+        if t5.empty:
+            st.caption("Needs ‘Corresponding Author from ICMR’ and ‘Any Author from ICMR’ columns.")
+        else:
+            st.caption(f"Corpus-wide: " + ", ".join(f"{k} — {v}" for k, v in t5_overall.items()))
+            st.dataframe(t5, use_container_width=True, hide_index=True)
+            download_buttons(t5, stem=stem + "_T5_leadership", key_prefix="t5", sheet_name="Table 5")
+
+        st.markdown("**Table 8 · Mandate fidelity, by institute** (top 15 by fidelity %)")
+        if t8.empty:
+            st.caption("No institute-vision matches found for this dataset.")
+        else:
+            st.dataframe(t8, use_container_width=True, hide_index=True)
+            download_buttons(t8, stem=stem + "_T8_mandate", key_prefix="t8", sheet_name="Table 8")
+
+        st.markdown("**Table 10 · Leading international partner countries, by disease-focus institute**")
+        if t10.empty:
+            st.caption("Needs an ‘All Country’ column to compute partner countries.")
+        else:
+            st.dataframe(t10, use_container_width=True, hide_index=True)
+            download_buttons(t10, stem=stem + "_T10_partners", key_prefix="t10", sheet_name="Table 10")
+
+    brand_footer()
 
 st.markdown("---")
 how_to_use([

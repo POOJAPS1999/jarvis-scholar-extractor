@@ -20,7 +20,9 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline import scientometrics as sci
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use
+from bibliometric_pipeline.branding import (
+    THEME_CSS, reactor_loader_html, how_to_use, brand_footer, watermark_chart,
+)
 from bibliometric_pipeline.ui_helpers import download_buttons, read_tabular_upload
 
 st.set_page_config(page_title="Jarvis Scholar - Scientometrics", layout="wide")
@@ -39,9 +41,9 @@ _INDIGO = "#4f46e5"
 def _bar(data, x, y, *, horizontal=False, color=_CYAN, height=320):
     enc_x, enc_y = (alt.X(f"{y}:Q", title=y), alt.Y(f"{x}:N", sort="-x", title=None)) if horizontal \
         else (alt.X(f"{x}:O", title=x), alt.Y(f"{y}:Q", title=y))
-    return alt.Chart(data).mark_bar(color=color, cornerRadius=3).encode(
+    return watermark_chart(alt.Chart(data).mark_bar(color=color, cornerRadius=3).encode(
         x=enc_x, y=enc_y, tooltip=list(data.columns)
-    ).properties(height=height)
+    ).properties(height=height))
 
 
 with st.expander("What file does this expect?", expanded=False):
@@ -81,19 +83,35 @@ icmr_mode = c2.toggle("ICMR mode", value=False,
                       help="ICMR-specific breakdowns (institute/division tables) — added in a later phase.")
 top_n = st.slider("Rows to show in ‘top N’ tables", 5, 30, 15)
 
+def _safe(fn, default):
+    """Run one metric; if it fails on an unusual file, degrade gracefully
+    (empty result + a note) instead of crashing the whole page."""
+    try:
+        return fn(), None
+    except Exception as e:  # noqa: BLE001
+        return default, str(e)
+
+
+_EMPTY = pd.DataFrame()
 _loader = st.empty()
 _loader.markdown(reactor_loader_html("JARVIS is computing scientometrics…"), unsafe_allow_html=True)
+_errs = {}
 with st.spinner("Crunching the corpus…"):
-    overview = sci.dataset_overview(df)
-    missing = sci.missing_data(df)
-    annual_prod = sci.annual_production(df)
-    annual_cit = sci.annual_citations(df)
-    sources = sci.most_relevant_sources(df, top_n)
-    bradford = sci.bradford(df)
-    hindex = sci.sources_h_index(df, top_n)
-    topcited = sci.top_cited(df, top_n)
-    localcited = sci.most_local_cited_references(df, top_n)
+    overview, _errs["Dataset overview"] = _safe(lambda: sci.dataset_overview(df), _EMPTY)
+    missing, _errs["Missing data"] = _safe(lambda: sci.missing_data(df), _EMPTY)
+    annual_prod, _errs["Annual production"] = _safe(lambda: sci.annual_production(df), _EMPTY)
+    annual_cit, _errs["Annual citations"] = _safe(lambda: sci.annual_citations(df), _EMPTY)
+    sources, _errs["Most relevant sources"] = _safe(lambda: sci.most_relevant_sources(df, top_n), _EMPTY)
+    bradford, _errs["Bradford"] = _safe(lambda: sci.bradford(df), _EMPTY)
+    hindex, _errs["h-index"] = _safe(lambda: sci.sources_h_index(df, top_n), _EMPTY)
+    topcited, _errs["Top cited"] = _safe(lambda: sci.top_cited(df, top_n), _EMPTY)
+    localcited, _errs["Local cited"] = _safe(lambda: sci.most_local_cited_references(df, top_n), _EMPTY)
 _loader.empty()
+
+_failed = {k: v for k, v in _errs.items() if v}
+if _failed:
+    st.warning("Some sections could not be computed for this file (the rest are shown below): "
+               + "; ".join(f"{k}" for k in _failed))
 
 if icmr_mode:
     st.info("ICMR mode is on. ICMR-specific institute/division tables arrive in a later phase; "
@@ -120,9 +138,9 @@ with cc1:
 with cc2:
     st.subheader("Total citations per year")
     if not annual_cit.empty:
-        line = alt.Chart(annual_cit).mark_line(point=True, color=_INDIGO).encode(
+        line = watermark_chart(alt.Chart(annual_cit).mark_line(point=True, color=_INDIGO).encode(
             x=alt.X("Year:O"), y=alt.Y("Total Citations:Q"),
-            tooltip=list(annual_cit.columns)).properties(height=320)
+            tooltip=list(annual_cit.columns)).properties(height=320))
         st.altair_chart(line, use_container_width=True)
     st.dataframe(annual_cit, use_container_width=True, hide_index=True)
 
@@ -136,10 +154,10 @@ if not bradford.empty:
         st.caption("Zone 1 = the core journals carrying ~1/3 of all documents.")
         st.dataframe(zone_sum, use_container_width=True, hide_index=True)
     with zc2:
-        curve = alt.Chart(bradford).mark_line(color=_CYAN).encode(
+        curve = watermark_chart(alt.Chart(bradford).mark_line(color=_CYAN).encode(
             x=alt.X("Rank:Q", title="Source rank"),
             y=alt.Y("Cumulative:Q", title="Cumulative documents"),
-            tooltip=["Rank", "Source", "Documents", "Zone"]).properties(height=300)
+            tooltip=["Rank", "Source", "Documents", "Zone"]).properties(height=300))
         st.altair_chart(curve, use_container_width=True)
     download_buttons(bradford, stem="bradford_law", key_prefix="br", sheet_name="Bradford")
 
@@ -172,6 +190,7 @@ if not localcited.empty:
     st.dataframe(localcited, use_container_width=True, hide_index=True)
     download_buttons(localcited, stem="local_cited_references", key_prefix="lc", sheet_name="Local cited")
 
+brand_footer(note=f"{len(df):,} records analysed")
 st.markdown("---")
 st.caption("Phase 1 of Scientometrics Visualization. Coming next: co-authorship / institutional / "
            "country / keyword co-occurrence maps, keyword density, strategic thematic map, and "

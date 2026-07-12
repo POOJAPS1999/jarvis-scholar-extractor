@@ -256,6 +256,7 @@ def sources_h_index(df: pd.DataFrame, n: int = 15) -> pd.DataFrame:
     ccol = find_col(df, "citations")
     if not (jcol and ccol):
         return pd.DataFrame(columns=["Source", "h-index", "Documents", "Total Citations"])
+    cols = ["Source", "h-index", "Documents", "Total Citations"]
     tmp = pd.DataFrame({"J": df[jcol].astype(str).str.strip(), "C": _num(df[ccol]).fillna(0)})
     tmp = tmp[(tmp["J"] != "") & (tmp["J"].str.lower() != "nan")]
     rows = []
@@ -266,6 +267,8 @@ def sources_h_index(df: pd.DataFrame, n: int = 15) -> pd.DataFrame:
             "Documents": len(grp),
             "Total Citations": int(grp["C"].sum()),
         })
+    if not rows:
+        return pd.DataFrame(columns=cols)
     out = pd.DataFrame(rows).sort_values(
         ["h-index", "Total Citations"], ascending=False).head(n).reset_index(drop=True)
     return out
@@ -279,6 +282,8 @@ def top_cited(df: pd.DataFrame, n: int = 15) -> pd.DataFrame:
     tcol = find_col(df, "title")
     jcol = find_col(df, "journal")
     if not ccol:
+        return pd.DataFrame(columns=["Title", "Journal", "Year", "Citations", "DOI"])
+    if not len(df):
         return pd.DataFrame(columns=["Title", "Journal", "Year", "Citations", "DOI"])
     out = pd.DataFrame({
         "Title": df[tcol].astype(str) if tcol else "",
