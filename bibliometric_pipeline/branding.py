@@ -232,17 +232,21 @@ def hero_html(title: str, tagline: str) -> str:
 # ---------------------------------------------------------------------
 # Dashboard clickable tile grid
 # ---------------------------------------------------------------------
-def feature_cards_html(tools: list) -> str:
-    """Reference-style module grid. Each tool dict: href, icon, title, desc,
-    pills (list), tint (icon-square bg), fg (icon-square colour). Whole card
-    is an <a> so clicking anywhere navigates."""
+def _href(slug: str, token: str = "") -> str:
+    return f"{slug}?jt={token}" if token else slug
+
+
+def feature_cards_html(tools: list, token: str = "") -> str:
+    """Reference-style module grid. Each tool dict: href (page slug), icon,
+    title, desc, pills (list), tint, fg. Whole card is an <a> so clicking
+    anywhere navigates; the ?jt token keeps the login across the reload."""
     cards = []
     for t in tools:
         pills = "".join(f'<span class="js-pill">{p}</span>' for p in t.get("pills", []))
         tint = t.get("tint", "#e8f6fb")
         fg = t.get("fg", "#0e7f9c")
         cards.append(f"""
-  <a class="js-tool-card" href="{t['href']}" target="_self">
+  <a class="js-tool-card" href="{_href(t['href'], token)}" target="_self">
     <div class="js-tool-head">
       <div class="js-sq" style="background:{tint};color:{fg}">{t['icon']}</div>
       <div>
@@ -286,12 +290,12 @@ def pipeline_card_html(s: dict) -> str:
 </div>"""
 
 
-def pipeline_cards_html(stages: list) -> str:
+def pipeline_cards_html(stages: list, token: str = "") -> str:
     """Top pipeline strip. Each stage dict: href, icon, title, desc, tint, fg."""
     cards = []
     for s in stages:
         cards.append(f"""
-  <a class="js-pipe-card" href="{s['href']}" target="_self">
+  <a class="js-pipe-card" href="{_href(s['href'], token)}" target="_self">
     <div class="js-sq" style="background:{s.get('tint', '#e8f6fb')};color:{s.get('fg', '#0e7f9c')}">{s['icon']}</div>
     <div class="js-pipe-t">{s['title']}<span class="js-arrow">→</span></div>
     <div class="js-pipe-d">{s['desc']}</div>

@@ -12,10 +12,45 @@ no cookies/components needed).
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import json
 import os
 
 import requests
 import streamlit as st
+
+# Signed token carried in the URL (?jt=…) so a full page reload (e.g. clicking
+# a whole-card <a> link) keeps the user logged in without a cookie component.
+_TOKEN_SECRET = os.environ.get("JS_AUTH_SECRET", "jarvis-scholar-auth-token-v1")
+
+
+def _sign(data: str) -> str:
+    return hmac.new(_TOKEN_SECRET.encode(), data.encode(), hashlib.sha256).hexdigest()[:24]
+
+
+def make_token(user: dict) -> str:
+    slim = {k: user.get(k, "") for k in ("email", "name", "last_name", "institution",
+                                         "role", "designation")}
+    payload = base64.urlsafe_b64encode(json.dumps(slim).encode()).decode().rstrip("=")
+    return f"{payload}.{_sign(payload)}"
+
+
+def read_token(tok: str):
+    try:
+        payload, sig = tok.split(".", 1)
+        if not hmac.compare_digest(sig, _sign(payload)):
+            return None
+        pad = "=" * (-len(payload) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload + pad))
+    except Exception:
+        return None
+
+
+def auth_token() -> str:
+    u = current_user()
+    return make_token(u) if u else ""
 
 try:
     _secret_url = st.secrets.get("API_BASE_URL")
@@ -40,6 +75,11 @@ def current_user():
 
 def logout():
     st.session_state.pop(_SESSION_KEY, None)
+    try:
+        if "jt" in st.query_params:
+            del st.query_params["jt"]
+    except Exception:
+        pass
 
 
 def _api_post(path, payload):
@@ -123,11 +163,28 @@ def _auth_screen():
 
 
 def require_login():
-    """Gate: if not logged in, show the auth screen and stop the page."""
-    if current_user():
-        return
-    _auth_screen()
-    st.stop()
+    """Gate: allow through if logged in (session) OR a valid ?jt token is in
+    the URL (survives full-page reloads from whole-card <a> links + refresh).
+    Otherwise show the auth screen and stop."""
+    if current_user() is None:
+        tok = None
+        try:
+            tok = st.query_params.get("jt")
+        except Exception:
+            tok = None
+        u = read_token(tok) if tok else None
+        if u:
+            st.session_state[_SESSION_KEY] = u
+    if current_user() is None:
+        _auth_screen()
+        st.stop()
+    # keep the token in the URL so reloads / whole-card links stay logged in
+    try:
+        tok = make_token(current_user())
+        if st.query_params.get("jt") != tok:
+            st.query_params["jt"] = tok
+    except Exception:
+        pass
 
 
 def sidebar_account():
