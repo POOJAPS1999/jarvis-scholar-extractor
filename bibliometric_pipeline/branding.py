@@ -90,6 +90,39 @@ h1, h2, h3, h4 {{ font-family: {_SANS}; letter-spacing: .2px; color: var(--js-in
 
 .js-hero-sub {{ color:var(--js-sub); font-family:{_SERIF}; font-size:1rem; }}
 hr {{ border-color: var(--js-line) !important; }}
+
+/* ---- reference-style dashboard ---- */
+.js-hero-wrap {{ position:relative; overflow:hidden; border-radius:18px; padding:6px 4px 2px; }}
+.js-badge {{ display:inline-block; font-family:{_SANS}; font-size:.66rem; font-weight:700;
+  letter-spacing:.06em; color:#2563eb; background:#e8f0ff; border:1px solid #d3e0fb;
+  border-radius:999px; padding:2px 9px; vertical-align:middle; margin-left:10px; }}
+
+.js-pipe {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:16px; margin:14px 0 6px; }}
+.js-pipe-card {{ display:block; text-decoration:none; color:inherit; background:#fff;
+  border:1px solid var(--js-line); border-radius:16px; padding:18px 18px 16px;
+  box-shadow:0 1px 2px rgba(18,40,59,.04); transition:transform .14s, box-shadow .14s, border-color .14s; }}
+.js-pipe-card:hover {{ transform:translateY(-2px); border-color:var(--js-cyan);
+  box-shadow:0 8px 22px rgba(18,40,59,.10); }}
+.js-sq {{ width:46px; height:46px; border-radius:13px; display:flex; align-items:center;
+  justify-content:center; font-size:22px; margin-bottom:12px; }}
+.js-pipe-t {{ font-family:{_SANS}; font-weight:700; color:var(--js-ink); font-size:1.02rem; }}
+.js-pipe-d {{ font-family:{_SERIF}; color:var(--js-sub); font-size:.86rem; margin-top:2px; }}
+.js-arrow {{ float:right; color:var(--js-cyan); font-weight:700; margin-top:-22px; }}
+
+.js-tool-card {{ display:block; text-decoration:none; color:inherit; background:#fff;
+  border:1px solid var(--js-line); border-radius:16px; padding:18px 18px 16px; height:100%;
+  box-shadow:0 1px 2px rgba(18,40,59,.04); transition:transform .14s, box-shadow .14s, border-color .14s; }}
+.js-tool-card:hover {{ transform:translateY(-3px); border-color:var(--js-cyan);
+  box-shadow:0 10px 26px rgba(18,40,59,.12); }}
+.js-tool-head {{ display:flex; gap:13px; align-items:flex-start; }}
+.js-tool-t {{ font-family:{_SANS}; font-weight:700; color:var(--js-ink); font-size:1.06rem; }}
+.js-tool-d {{ font-family:{_SERIF}; color:var(--js-sub); font-size:.88rem; line-height:1.45; margin-top:3px; }}
+.js-pills {{ margin-top:12px; }}
+.js-pill {{ display:inline-block; font-family:{_SANS}; font-size:.66rem; font-weight:600;
+  letter-spacing:.04em; color:#3763a6; background:#eef3fb; border:1px solid #dde8f7;
+  border-radius:7px; padding:3px 8px; margin:0 6px 6px 0; }}
+.js-open {{ margin-top:12px; font-family:{_SANS}; font-weight:700; font-size:.9rem; color:var(--js-cyan); }}
+.js-footnote {{ text-align:center; color:var(--js-sub); font-family:{_SERIF}; font-size:.86rem; margin-top:18px; }}
 </style>
 """
 
@@ -178,19 +211,59 @@ def hero_html(title: str, tagline: str) -> str:
 # Dashboard clickable tile grid
 # ---------------------------------------------------------------------
 def feature_cards_html(tools: list) -> str:
-    """tools: list of dicts with keys href, icon, title, desc, tag.
-    The whole card is an <a> so clicking anywhere navigates to the tool."""
+    """Reference-style module grid. Each tool dict: href, icon, title, desc,
+    pills (list), tint (icon-square bg), fg (icon-square colour). Whole card
+    is an <a> so clicking anywhere navigates."""
     cards = []
     for t in tools:
+        pills = "".join(f'<span class="js-pill">{p}</span>' for p in t.get("pills", []))
+        tint = t.get("tint", "#e8f6fb")
+        fg = t.get("fg", "#0e7f9c")
         cards.append(f"""
-  <a class="js-card" href="{t['href']}" target="_self">
-    <div class="js-ic-wrap">{t['icon']}</div>
-    <div class="js-title">{t['title']}</div>
-    <div class="js-desc">{t['desc']}</div>
-    <div class="js-tag">{t['tag']}</div>
-    <div class="js-cta">Open {t['title']} →</div>
+  <a class="js-tool-card" href="{t['href']}" target="_self">
+    <div class="js-tool-head">
+      <div class="js-sq" style="background:{tint};color:{fg}">{t['icon']}</div>
+      <div>
+        <div class="js-tool-t">{t['title']}</div>
+        <div class="js-tool-d">{t['desc']}</div>
+      </div>
+    </div>
+    <div class="js-pills">{pills}</div>
+    <div class="js-open">Open {t['title']} →</div>
   </a>""")
     return f'<div class="js-grid">{"".join(cards)}</div>'
+
+
+def pipeline_cards_html(stages: list) -> str:
+    """Top pipeline strip. Each stage dict: href, icon, title, desc, tint, fg."""
+    cards = []
+    for s in stages:
+        cards.append(f"""
+  <a class="js-pipe-card" href="{s['href']}" target="_self">
+    <div class="js-sq" style="background:{s.get('tint', '#e8f6fb')};color:{s.get('fg', '#0e7f9c')}">{s['icon']}</div>
+    <div class="js-pipe-t">{s['title']}<span class="js-arrow">→</span></div>
+    <div class="js-pipe-d">{s['desc']}</div>
+  </a>""")
+    return f'<div class="js-pipe">{"".join(cards)}</div>'
+
+
+def hero_html_v2(title: str, tagline: str, badge: str = "v2.0") -> str:
+    return f"""
+<div class="js-hero-wrap"><div style="display:flex;align-items:center;gap:18px;">
+  <svg width="58" height="58" viewBox="0 0 100 100" aria-hidden="true">
+    <defs><radialGradient id="jsHeroCore2" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff"/><stop offset="55%" stop-color="#22c3e6"/>
+      <stop offset="100%" stop-color="#0e7f9c"/></radialGradient></defs>
+    <circle cx="50" cy="50" r="31" fill="none" stroke="#3b82f6" stroke-width="2.2" stroke-dasharray="5 8" opacity="0.55"/>
+    <circle cx="50" cy="50" r="21" fill="none" stroke="#0e7f9c" stroke-width="2.6" stroke-dasharray="24 10" stroke-linecap="round"/>
+    <circle cx="50" cy="50" r="9" fill="url(#jsHeroCore2)"/></svg>
+  <div>
+    <div style="font-size:2.1rem;font-weight:800;letter-spacing:.4px;color:#12283b;font-family:{_SANS};">
+      {title}<span class="js-badge">{badge}</span></div>
+    <div class="js-hero-sub">{tagline}</div>
+  </div>
+</div></div>
+"""
 
 
 # ---------------------------------------------------------------------
