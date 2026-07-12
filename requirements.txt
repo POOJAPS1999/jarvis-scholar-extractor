@@ -7,6 +7,8 @@ python-dotenv
 streamlit
 rispy
 matplotlib
+networkx
+plotly
 
 # Phase 1 backend (FastAPI + Celery/Redis + Postgres) - merged in here
 # because Railway's default Python builder (Nixpacks) only installs from

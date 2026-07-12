@@ -184,8 +184,93 @@ if not localcited.empty:
     st.dataframe(localcited, use_container_width=True, hide_index=True)
     download_buttons(localcited, stem="local_cited_references", key_prefix="lc", sheet_name="Local cited")
 
+# --- Network maps (Phase 2) ---
+st.header("9 · Network maps (VOSviewer-style)")
+st.caption("Interactive collaboration & co-occurrence maps. Pick a map, tune it, and generate. "
+           "Zoom/pan/hover in the chart; use the 📷 icon (or the PNG button) to save, or download "
+           "the VOSviewer .map/.net files to open in the real VOSviewer.")
+
+_MAPS = [
+    "Co-authorship (first / last / corresponding)",
+    "Institutional collaboration",
+    "Country collaboration",
+    "Country collaboration (excl. India)",
+    "Keyword co-occurrence",
+    "Keyword density",
+    "Bibliographic coupling",
+]
+map_choice = st.selectbox("Map type", _MAPS, key="mapchoice")
+mc1, mc2 = st.columns(2)
+top_n = mc1.slider("Nodes to show (top by weight)", 20, 150, 60, key="topn")
+min_occ = min_shared = 5
+if map_choice.startswith("Keyword"):
+    min_occ = mc2.slider("Min keyword occurrences", 3, 30, 5, key="minocc")
+elif map_choice == "Bibliographic coupling":
+    min_shared = mc2.slider("Min shared references", 2, 10, 2, key="minshared")
+
+if st.button("Generate map", type="primary", key="genmap"):
+    from bibliometric_pipeline import networks as nw, network_viz as nv
+    import zipfile
+    _l = st.empty()
+    _l.markdown(reactor_loader_html("JARVIS is mapping the network…"), unsafe_allow_html=True)
+    try:
+        with st.spinner("Building the network…"):
+            weight_name = "Documents"
+            density = False
+            if map_choice.startswith("Co-authorship"):
+                items, edges, extra = nw.author_collab(df)
+            elif map_choice == "Institutional collaboration":
+                items, edges, extra = nw.institution_collab(df, icmr_mode=icmr_mode)
+            elif map_choice == "Country collaboration":
+                items, edges, extra = nw.country_collab(df, exclude_india=False)
+            elif map_choice == "Country collaboration (excl. India)":
+                items, edges, extra = nw.country_collab(df, exclude_india=True)
+            elif map_choice == "Keyword co-occurrence":
+                items, edges, extra = nw.keyword_cooccurrence(df, min_occ); weight_name = "Occurrences"
+            elif map_choice == "Keyword density":
+                items, edges, extra = nw.keyword_cooccurrence(df, min_occ); weight_name = "Occurrences"; density = True
+            else:  # Bibliographic coupling
+                items, edges, extra = nw.bibliographic_coupling(df, min_shared); weight_name = "References"
+            fig = (nv.density_figure(items, edges, extra, title=map_choice, top_n=max(top_n, 80))
+                   if density else
+                   nv.network_figure(items, edges, extra, title=map_choice, top_n=top_n, weight_name=weight_name))
+        _l.empty()
+        st.caption(f"{len(items):,} total nodes · {len(edges):,} links · showing top {top_n} by weight.")
+        st.plotly_chart(fig, use_container_width=True,
+                        config={"displaylogo": False,
+                                "toImageButtonOptions": {"format": "png", "filename": "jarvis_network",
+                                                         "scale": 2}})
+        dl1, dl2 = st.columns(2)
+        if not density:
+            with dl1:
+                st.download_button("⬇ Download PNG", key="netpng",
+                    data=nv.network_png(items, edges, extra, title=map_choice, top_n=top_n, weight_name=weight_name),
+                    file_name="jarvis_network.png", mime="image/png")
+        # VOSviewer .map + .net as a zip
+        mb, nb = nw.vosviewer_bytes(items, edges, extra)
+        zbuf = io.BytesIO()
+        with zipfile.ZipFile(zbuf, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("network_map.txt", mb)
+            z.writestr("network_network.txt", nb)
+        with dl2:
+            st.download_button("⬇ VOSviewer files (.map + .net)", data=zbuf.getvalue(),
+                               file_name="jarvis_vosviewer_network.zip", mime="application/zip", key="netvos")
+    except Exception as e:
+        _l.empty()
+        st.error(f"Could not build this map: {e}")
+
 brand_footer(note=f"{len(df):,} records analysed")
 st.markdown("---")
-st.caption("Phase 1 of Scientometrics Visualization. Coming next: co-authorship / institutional / "
-           "country / keyword co-occurrence maps, keyword density, strategic thematic map, and "
-           "bibliographic coupling.")
+how_to_use([
+    ("🛰", "Enrich & de-duplicate first",
+     "Run Data Enrichment, then Fuzzy Title Match to remove duplicates, so metrics and maps are clean."),
+    ("📤", "Upload the enriched sheet",
+     "Columns (journal, year, citations, authors, references, keywords, countries) are auto-detected."),
+    ("📊", "Read the tables & charts",
+     "Overview, missing-data, annual trends, Bradford, sources, h-index, top-cited render automatically. Each chart has a PNG download."),
+    ("🕸", "Generate a network map",
+     "In section 9, pick a map (co-authorship, institutional, country, keyword, coupling), tune the sliders, and click Generate."),
+    ("⬇️", "Export",
+     "Every table downloads as CSV/Excel; every chart & map as PNG; and maps also export VOSviewer .map/.net files."),
+])
+st.caption("Coming next (Phase 3): strategic thematic map (motor-theme quadrant) and grants visualization.")
