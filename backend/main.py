@@ -192,14 +192,48 @@ def _anthropic_vision(key, media, b64, prompt):
     return text, f"anthropic:{model}"
 
 
+def _gemini_pick_model(key):
+    """Query the account's available models and pick a vision-capable Flash
+    model that supports generateContent (self-heals when Google retires a
+    model name)."""
+    try:
+        lst = requests.get(
+            f"https://generativelanguage.googleapis.com/v1beta/models?key={key}",
+            timeout=30).json()
+    except Exception:
+        return None
+    names = []
+    for m in lst.get("models", []):
+        if "generateContent" not in m.get("supportedGenerationMethods", []):
+            continue
+        short = m.get("name", "").split("/")[-1]
+        low = short.lower()
+        if any(x in low for x in ("embedding", "aqa", "imagen", "veo", "tts")):
+            continue
+        names.append(short)
+    # prefer stable flash models, newest-looking first
+    flash = sorted([n for n in names if "flash" in n.lower() and "thinking" not in n.lower()],
+                   reverse=True)
+    return (flash or names or [None])[0]
+
+
 def _gemini_vision(key, media, b64, prompt):
     """Google Gemini — has a free tier (Google AI Studio key)."""
-    model = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
     body = {"contents": [{"parts": [
         {"inline_data": {"mime_type": media, "data": b64}},
         {"text": prompt}]}]}
-    r = requests.post(url, json=body, timeout=90)
+
+    def _call(m):
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={key}"
+        return requests.post(url, json=body, timeout=90)
+
+    model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+    r = _call(model)
+    if r.status_code == 404:  # model retired/renamed → discover a live one
+        discovered = _gemini_pick_model(key)
+        if discovered:
+            model = discovered
+            r = _call(model)
     if not r.ok:
         raise HTTPException(502, f"Gemini error {r.status_code}: {r.text[:300]}")
     data = r.json()
