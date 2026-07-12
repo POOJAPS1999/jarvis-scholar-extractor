@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline.fuzzy_tools import cross_match, self_dedup
 from bibliometric_pipeline.ui_helpers import download_buttons, read_tabular_upload
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer, fuzzy_titles_template_bytes
 
 st.set_page_config(page_title="Jarvis Scholar - Fuzzy Title Match", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -32,6 +32,19 @@ st.caption(
     "Match titles by similarity — no OpenAlex/PubMed/Crossref lookups. "
     "Great for reconciling two title lists or finding duplicates in one."
 )
+
+with st.expander("📋 Required format — download a blank template", expanded=False):
+    st.markdown(
+        "Each file just needs a column of titles (a `Title` column works out of the box; "
+        "any column can be picked after upload). Use **one** file to find duplicates, or "
+        "**two** files to compare lists."
+    )
+    st.download_button(
+        "⬇ Download blank titles template (.xlsx)",
+        data=fuzzy_titles_template_bytes(),
+        file_name="jarvis_scholar_titles_template.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 def _pick_title_column(df, key, label="title column"):

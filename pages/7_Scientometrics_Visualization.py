@@ -24,7 +24,7 @@ from bibliometric_pipeline import charts
 from bibliometric_pipeline import networks as nw
 from bibliometric_pipeline import icmr_tables as it
 from bibliometric_pipeline.branding import (
-    THEME_CSS, reactor_loader_html, how_to_use, brand_footer,
+    THEME_CSS, reactor_loader_html, how_to_use, brand_footer, scopus_input_template_bytes,
 )
 from bibliometric_pipeline.ui_helpers import download_buttons, read_tabular_upload
 
@@ -46,6 +46,14 @@ with st.expander("What file does this expect?", expanded=False):
         "of Data Enrichment, ideally after de-duplication. The tool auto-detects "
         "columns like journal, year, citations, authors, references, countries, "
         "and keywords, so most enriched sheets work as-is."
+    )
+    st.download_button(
+        "⬇ Download blank enriched-dataset template (.xlsx)",
+        data=scopus_input_template_bytes(),
+        file_name="jarvis_scholar_scientometrics_input_template.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        help="The columns this tool reads. Normally you'd use the Data Enrichment output; "
+             "this is for building an enriched-style dataset by hand.",
     )
 
 uploaded = st.file_uploader("Upload enriched dataset (.xlsx / .csv)", type=["xlsx", "xls", "csv"])

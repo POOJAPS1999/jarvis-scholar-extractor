@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline.sheet_merge import merge_sheets, JOIN_TYPES
 from bibliometric_pipeline.ui_helpers import download_buttons
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer, merge_example_bytes
 
 st.set_page_config(page_title="Jarvis Scholar - Merge Sheets", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -28,6 +28,20 @@ st.caption(
     "Upload two spreadsheets, pick the column(s) to match on (names can differ), "
     "and get one merged sheet back, plus a summary of what didn't match."
 )
+
+with st.expander("📋 Required format — download an example", expanded=False):
+    st.markdown(
+        "Merge works on **any** two sheets — you pick the join column(s) after upload, and "
+        "they don't have to share a name. This example workbook has two tabs (`Sheet A`, "
+        "`Sheet B`) sharing a `DOI` column; save each tab as its own file to try it, or just "
+        "use it as a format guide."
+    )
+    st.download_button(
+        "⬇ Download example two-sheet workbook (.xlsx)",
+        data=merge_example_bytes(),
+        file_name="jarvis_scholar_merge_example.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 def _load_with_sheet_picker(uploaded, side):

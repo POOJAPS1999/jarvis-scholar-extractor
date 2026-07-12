@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from bibliometric_pipeline.icmr_institutes import resolve_all_icmr_institutes
 from bibliometric_pipeline import icmr_tables as it
 from bibliometric_pipeline.ui_helpers import download_buttons, read_tabular_upload
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer, icmr_tagger_template_bytes
 
 st.set_page_config(page_title="Jarvis Scholar - ICMR Tagger", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -38,6 +38,20 @@ st.caption(
     "institute(s). Handles former names, bare acronyms, multi-institute rows, "
     "and (if present) a per-author `Author_Affiliation_Map` column."
 )
+
+with st.expander("📋 Required format — download a blank template", expanded=False):
+    st.markdown(
+        "This tool scans affiliation columns — `Affliation`, `First Author Affiliation`, "
+        "`Corresponding Author Affiliation`, and (optionally) `Author_Affiliation_Map`. "
+        "Download the template, paste your rows in, and upload it. (To also generate the "
+        "ICMR analysis tables, use an *enriched* sheet that additionally has `Citations` etc.)"
+    )
+    st.download_button(
+        "⬇ Download blank ICMR-tagger template (.xlsx)",
+        data=icmr_tagger_template_bytes(),
+        file_name="jarvis_scholar_icmr_tagger_template.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 _CCOE_LABEL = "ICMR Collaborating Centre of Excellence (external partner institution, not one of the 28 core institutes)"
 _HQ_LABEL = "ICMR Headquarters, New Delhi (not a constituent institute)"

@@ -249,6 +249,57 @@ SCOPUS_INPUT_COLUMNS = [
 ]
 
 
+def icmr_tagger_template_bytes() -> bytes:
+    """Blank template for the ICMR Institute Tagger: the affiliation columns
+    it scans, with one example row."""
+    df = pd.DataFrame([{
+        "Sno": 1,
+        "Clean Title": "Example study title",
+        "Affliation": "Dept of Virology, ICMR-National Institute of Virology, Pune, India; AIIMS, New Delhi",
+        "First Author Affiliation": "ICMR-National Institute of Virology, Pune, India",
+        "Corresponding Author Affiliation": "ICMR-National Institute of Virology, Pune, India",
+        "Author_Affiliation_Map": '{"Sharma, Pooja": "ICMR-NIV, Pune", "Kumar, Anil": "AIIMS, New Delhi"}',
+    }])
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as xw:
+        df.to_excel(xw, index=False, sheet_name="ICMR Tagger Input")
+    return buf.getvalue()
+
+
+def fuzzy_titles_template_bytes() -> bytes:
+    """Blank template for the Fuzzy Title Match tool: a single Title column.
+    Use one file for de-duplication, or two such files to compare lists."""
+    df = pd.DataFrame({"Title": [
+        "Circulating tumor DNA in neuroblastoma",
+        "Deep learning for medical image analysis: a survey",
+        "Global burden of disease, 1990 to 2023",
+    ]})
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as xw:
+        df.to_excel(xw, index=False, sheet_name="Titles")
+    return buf.getvalue()
+
+
+def merge_example_bytes() -> bytes:
+    """Example workbook for Merge Sheets: two sheets (A and B) sharing a DOI
+    column. Upload each as its own file, or save these tabs separately."""
+    a = pd.DataFrame({
+        "DOI": ["10.1/aaa", "10.2/bbb", "10.3/ccc"],
+        "Title": ["Paper A", "Paper B", "Paper C"],
+        "Authors": ["Sharma P", "Kumar A", "Rao M"],
+    })
+    b = pd.DataFrame({
+        "DOI": ["10.1/aaa", "10.2/bbb", "10.9/zzz"],
+        "Citations": [12, 4, 30],
+        "Journal": ["Nature", "Lancet", "Cell"],
+    })
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as xw:
+        a.to_excel(xw, index=False, sheet_name="Sheet A")
+        b.to_excel(xw, index=False, sheet_name="Sheet B")
+    return buf.getvalue()
+
+
 def scopus_input_template_bytes() -> bytes:
     example = {
         "EID": "2-s2.0-12345678901",
