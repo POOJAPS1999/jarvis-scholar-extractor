@@ -303,6 +303,65 @@ def _normalize_reference(ref: str) -> str:
     return r
 
 
+import html as _html
+
+# Funder-name normalisation (India/global common funders); anything without a
+# rule keeps its own name, so this stays useful for non-ICMR datasets too.
+_FUNDER_NORM_RULES = [
+    (r"indian council of medical research|^icmr$|^icmr \(|^icmr - ", "Indian Council of Medical Research (ICMR)"),
+    (r"national institutes of health|^nih$|nih hhs", "US National Institutes of Health (NIH)"),
+    (r"department of biotechnology|^dbt$", "Department of Biotechnology, India (DBT)"),
+    (r"department of science.{0,6}technology|^dst$", "Department of Science & Technology, India (DST)"),
+    (r"council of scientific and industrial research|^csir$", "Council of Scientific & Industrial Research, India (CSIR)"),
+    (r"gates foundation", "Bill & Melinda Gates Foundation"),
+    (r"science and engineering research board|^serb$", "Science and Engineering Research Board, India (SERB)"),
+    (r"university grants commission|^ugc$", "University Grants Commission, India (UGC)"),
+    (r"world health organi[sz]ation|^who$", "World Health Organization (WHO)"),
+    (r"wellcome trust india alliance|dbt.{0,3}wellcome|wellcome trust dbt", "Wellcome Trust/DBT India Alliance"),
+    (r"^wellcome trust$", "Wellcome Trust"),
+    (r"department of health research", "Department of Health Research, India (DHR)"),
+]
+
+
+def _parse_grants(cell):
+    if _blank_val(cell):
+        return []
+    out = []
+    for e in [e.strip() for e in str(cell).split(";") if e.strip()]:
+        name = re.sub(r"\s*\([^)]*\)\s*$", "", e).strip()
+        name = _html.unescape(name)
+        if name:
+            out.append(name)
+    return out
+
+
+def _normalize_funder(name):
+    low = name.lower().strip()
+    for pat, canon in _FUNDER_NORM_RULES:
+        if re.search(pat, low):
+            return canon
+    return name.strip()
+
+
+def _blank_val(v):
+    return v is None or (isinstance(v, float) and pd.isna(v)) or str(v).strip() == "" or str(v).strip().lower() == "nan"
+
+
+def top_funders(df: pd.DataFrame, n: int = 15) -> pd.DataFrame:
+    """Leading funders across the corpus (which grants funded the studies)."""
+    from collections import Counter
+    col = find_col(df, "grants")
+    if not col:
+        return pd.DataFrame(columns=["Funder", "Papers"])
+    ctr: Counter = Counter()
+    for cell in df[col].dropna():
+        for f in {_normalize_funder(x) for x in _parse_grants(cell)}:
+            ctr[f] += 1
+    if not ctr:
+        return pd.DataFrame(columns=["Funder", "Papers"])
+    return pd.DataFrame(ctr.most_common(n), columns=["Funder", "Papers"])
+
+
 def most_local_cited_references(df: pd.DataFrame, n: int = 20) -> pd.DataFrame:
     rcol = find_col(df, "references")
     if not rcol:

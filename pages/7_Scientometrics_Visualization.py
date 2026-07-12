@@ -10,6 +10,7 @@ top-cited records, most locally-cited references.
 bibliographic coupling — and the strategic thematic map arrive in later
 phases.)
 """
+import io
 import os
 import sys
 
@@ -20,6 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline import scientometrics as sci
 from bibliometric_pipeline import charts
+from bibliometric_pipeline import networks as nw
 from bibliometric_pipeline.branding import (
     THEME_CSS, reactor_loader_html, how_to_use, brand_footer,
 )
@@ -94,6 +96,8 @@ with st.spinner("Crunching the corpus…"):
     hindex, _errs["h-index"] = _safe(lambda: sci.sources_h_index(df, top_n), _EMPTY)
     topcited, _errs["Top cited"] = _safe(lambda: sci.top_cited(df, top_n), _EMPTY)
     localcited, _errs["Local cited"] = _safe(lambda: sci.most_local_cited_references(df, top_n), _EMPTY)
+    themes, _errs["Thematic map"] = _safe(lambda: nw.thematic_map(df, min_occurrence=5), _EMPTY)
+    funders, _errs["Grants"] = _safe(lambda: sci.top_funders(df, top_n), _EMPTY)
 _loader.empty()
 
 _failed = {k: v for k, v in _errs.items() if v}
@@ -258,6 +262,31 @@ if st.button("Generate map", type="primary", key="genmap"):
     except Exception as e:
         _l.empty()
         st.error(f"Could not build this map: {e}")
+
+# --- Strategic thematic map (Phase 3) ---
+st.header("10 · Strategic thematic map")
+st.caption("Keyword themes placed by relevance (centrality) and development (density). "
+           "Upper-right = motor themes; upper-left = niche; lower-right = basic/transversal; "
+           "lower-left = emerging or declining.")
+if themes is None or themes.empty:
+    st.info("Not enough co-occurring keywords to build themes (needs a larger corpus, or lower the "
+            "keyword-occurrence threshold). Works well on full datasets.", icon="ℹ️")
+else:
+    charts.render_chart(charts.thematic_map(themes), "strategic_thematic_map", "themap")
+    st.dataframe(themes, use_container_width=True, hide_index=True)
+    download_buttons(themes, stem="strategic_thematic_map", key_prefix="tm", sheet_name="Themes")
+
+# --- Grants / funding (Phase 3) ---
+st.header("11 · Funding sources")
+if funders is None or funders.empty:
+    st.info("No Grants/Funding column found (or it's empty) in this dataset.", icon="ℹ️")
+else:
+    charts.render_chart(
+        charts.hbar(funders["Funder"].tolist(), funders["Papers"].tolist(),
+                    title="Leading funders", xlabel="Papers"),
+        "top_funders", "fund")
+    st.dataframe(funders, use_container_width=True, hide_index=True)
+    download_buttons(funders, stem="top_funders", key_prefix="fn", sheet_name="Funders")
 
 brand_footer(note=f"{len(df):,} records analysed")
 st.markdown("---")

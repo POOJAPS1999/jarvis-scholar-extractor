@@ -382,6 +382,74 @@ def keyword_cooccurrence(df, min_occurrence=5):
     return items, edges, extra
 
 
+def thematic_map(df, min_occurrence=5, min_cluster_size=2, top_labels=3):
+    """Strategic thematic map (Biblioshiny-style motor-theme quadrant).
+    Clusters the keyword co-occurrence network into themes and computes
+    Callon's centrality (external link strength) and density (internal link
+    strength / theme size) for each, then assigns a quadrant by median split.
+    Returns a DataFrame: Theme, Keywords, Centrality, Density, Occurrences,
+    Keywords in theme, Quadrant.
+    """
+    import networkx as nx
+    items, edges, extra = keyword_cooccurrence(df, min_occurrence)
+    cols = ["Theme", "Keywords", "Centrality", "Density", "Occurrences",
+            "Keywords in theme", "Quadrant"]
+    if not items:
+        return pd.DataFrame(columns=cols)
+    G = nx.Graph()
+    for i, lbl in items.items():
+        G.add_node(i, label=lbl, occ=extra.get(i, {}).get("weight<Occurrences>", 0))
+    for (a, b), w in edges.items():
+        G.add_edge(a, b, weight=float(w))
+    G.remove_nodes_from([n for n in list(G.nodes) if G.degree(n) == 0])
+    if G.number_of_nodes() == 0:
+        return pd.DataFrame(columns=cols)
+    try:
+        comms = nx.algorithms.community.greedy_modularity_communities(G, weight="weight")
+    except Exception:
+        comms = [set(G.nodes)]
+
+    rows = []
+    for c in comms:
+        nodes = set(c)
+        if len(nodes) < min_cluster_size:
+            continue
+        internal = external = 0.0
+        for u, v, d in G.edges(data=True):
+            w = d["weight"]
+            if u in nodes and v in nodes:
+                internal += w
+            elif u in nodes or v in nodes:
+                external += w
+        n = len(nodes)
+        top = sorted(nodes, key=lambda x: G.nodes[x]["occ"], reverse=True)[:top_labels]
+        rows.append({
+            "Theme": G.nodes[top[0]]["label"],
+            "Keywords": "; ".join(G.nodes[x]["label"] for x in top),
+            "Centrality": round(10.0 * external, 1),
+            "Density": round(100.0 * internal / n, 1),
+            "Occurrences": int(sum(G.nodes[x]["occ"] for x in nodes)),
+            "Keywords in theme": n,
+        })
+    tdf = pd.DataFrame(rows, columns=[c for c in cols if c != "Quadrant"])
+    if tdf.empty:
+        return pd.DataFrame(columns=cols)
+    mc, md = tdf["Centrality"].median(), tdf["Density"].median()
+
+    def quad(r):
+        hi_c, hi_d = r["Centrality"] >= mc, r["Density"] >= md
+        if hi_c and hi_d:
+            return "Motor themes"
+        if not hi_c and hi_d:
+            return "Niche themes"
+        if not hi_c and not hi_d:
+            return "Emerging or declining"
+        return "Basic & transversal"
+
+    tdf["Quadrant"] = tdf.apply(quad, axis=1)
+    return tdf.sort_values("Occurrences", ascending=False).reset_index(drop=True)
+
+
 def bibliographic_coupling(df, min_shared_refs=2):
     doi_to_papers = defaultdict(set)
     label, cites, refcount = {}, {}, {}

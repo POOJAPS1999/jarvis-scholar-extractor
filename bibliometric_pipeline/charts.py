@@ -146,6 +146,46 @@ def bradford_curve(rank: List[int], cumulative: List[int], zones: Optional[List[
     return fig
 
 
+_QUAD_COLORS = {
+    "Motor themes": "#0e7f9c", "Niche themes": "#7d3c98",
+    "Basic & transversal": "#d8572a", "Emerging or declining": "#5f6a6a",
+}
+
+
+def thematic_map(themes, x="Centrality", y="Density", size="Occurrences",
+                 label="Theme", quad="Quadrant", title="Strategic thematic map") -> plt.Figure:
+    """Biblioshiny-style strategic diagram: bubbles positioned by Callon
+    centrality (x) and density (y), split into four quadrants by the median."""
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(9, 7.2), dpi=150)
+    xs = themes[x].astype(float).values
+    ys = themes[y].astype(float).values
+    sz = themes[size].astype(float).values
+    mx, my = float(np.median(xs)), float(np.median(ys))
+    smax = sz.max() if len(sz) and sz.max() else 1
+    sizes = 260 + 2400 * (sz / smax)
+    colors = [_QUAD_COLORS.get(q, _CYAN) for q in themes[quad]]
+    ax.axvline(mx, color="#c7d6e6", linestyle="--", linewidth=1, zorder=1)
+    ax.axhline(my, color="#c7d6e6", linestyle="--", linewidth=1, zorder=1)
+    ax.scatter(xs, ys, s=sizes, c=colors, alpha=0.55, edgecolors="white", linewidths=1.3, zorder=3)
+    for _, r in themes.iterrows():
+        ax.text(float(r[x]), float(r[y]), str(r[label]), ha="center", va="center",
+                fontsize=8.5, color=_INK, fontweight="bold", zorder=4)
+    x0, x1 = ax.get_xlim()
+    y0, y1 = ax.get_ylim()
+    corners = [("Motor themes", x1, y1, "right", "top"),
+               ("Niche themes", x0, y1, "left", "top"),
+               ("Basic & transversal", x1, y0, "right", "bottom"),
+               ("Emerging / declining", x0, y0, "left", "bottom")]
+    for text, cx, cy, ha, va in corners:
+        ax.text(cx, cy, text, ha=ha, va=va, fontsize=9.5, color="#8aa0b8",
+                style="italic", zorder=2)
+    _style(ax, title, "Relevance (centrality) →", "Development (density) →")
+    _watermark(fig)
+    fig.tight_layout()
+    return fig
+
+
 def fig_to_png(fig: plt.Figure, dpi: int = 200) -> bytes:
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight", facecolor="white")

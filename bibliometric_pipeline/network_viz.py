@@ -85,7 +85,8 @@ def network_figure(items: Dict[str, str], edges: Dict[Tuple[str, str], int],
     G = _top_subgraph(items, edges, extra, top_n)
     if G.number_of_nodes() == 0:
         fig = go.Figure()
-        fig.add_annotation(text="Not enough connected nodes to draw a map at these settings.",
+        fig.add_annotation(text="Not enough connected nodes at these settings — try a larger dataset "
+                           "or lower the min-occurrence / min-shared-refs threshold.",
                            showarrow=False, font=dict(size=13, color="#4a627a"))
         fig.update_layout(height=420, paper_bgcolor=_BG, plot_bgcolor=_BG)
         return fig
