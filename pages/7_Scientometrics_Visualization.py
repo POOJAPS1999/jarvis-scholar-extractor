@@ -13,15 +13,15 @@ phases.)
 import os
 import sys
 
-import altair as alt
 import pandas as pd
 import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline import scientometrics as sci
+from bibliometric_pipeline import charts
 from bibliometric_pipeline.branding import (
-    THEME_CSS, reactor_loader_html, how_to_use, brand_footer, watermark_chart,
+    THEME_CSS, reactor_loader_html, how_to_use, brand_footer,
 )
 from bibliometric_pipeline.ui_helpers import download_buttons, read_tabular_upload
 
@@ -33,18 +33,6 @@ st.caption(
     "Phase 1: overview, trends, sources, citation structure. Network maps and "
     "thematic analysis are coming next."
 )
-
-_CYAN = "#0e7f9c"
-_INDIGO = "#4f46e5"
-
-
-def _bar(data, x, y, *, horizontal=False, color=_CYAN, height=320):
-    enc_x, enc_y = (alt.X(f"{y}:Q", title=y), alt.Y(f"{x}:N", sort="-x", title=None)) if horizontal \
-        else (alt.X(f"{x}:O", title=x), alt.Y(f"{y}:Q", title=y))
-    return watermark_chart(alt.Chart(data).mark_bar(color=color, cornerRadius=3).encode(
-        x=enc_x, y=enc_y, tooltip=list(data.columns)
-    ).properties(height=height))
-
 
 with st.expander("What file does this expect?", expanded=False):
     st.markdown(
@@ -133,15 +121,18 @@ cc1, cc2 = st.columns(2)
 with cc1:
     st.subheader("Documents per year")
     if not annual_prod.empty:
-        st.altair_chart(_bar(annual_prod, "Year", "Documents"), use_container_width=True)
+        charts.render_chart(
+            charts.vbar(annual_prod["Year"].tolist(), annual_prod["Documents"].tolist(),
+                        title="Annual scientific production", ylabel="Documents"),
+            "annual_production", "annprod")
     st.dataframe(annual_prod, use_container_width=True, hide_index=True)
 with cc2:
     st.subheader("Total citations per year")
     if not annual_cit.empty:
-        line = watermark_chart(alt.Chart(annual_cit).mark_line(point=True, color=_INDIGO).encode(
-            x=alt.X("Year:O"), y=alt.Y("Total Citations:Q"),
-            tooltip=list(annual_cit.columns)).properties(height=320))
-        st.altair_chart(line, use_container_width=True)
+        charts.render_chart(
+            charts.line(annual_cit["Year"].tolist(), annual_cit["Total Citations"].tolist(),
+                        title="Annual total citations", ylabel="Citations"),
+            "annual_citations", "anncit")
     st.dataframe(annual_cit, use_container_width=True, hide_index=True)
 
 # --- Bradford's law ---
@@ -154,26 +145,29 @@ if not bradford.empty:
         st.caption("Zone 1 = the core journals carrying ~1/3 of all documents.")
         st.dataframe(zone_sum, use_container_width=True, hide_index=True)
     with zc2:
-        curve = watermark_chart(alt.Chart(bradford).mark_line(color=_CYAN).encode(
-            x=alt.X("Rank:Q", title="Source rank"),
-            y=alt.Y("Cumulative:Q", title="Cumulative documents"),
-            tooltip=["Rank", "Source", "Documents", "Zone"]).properties(height=300))
-        st.altair_chart(curve, use_container_width=True)
+        charts.render_chart(
+            charts.bradford_curve(bradford["Rank"].tolist(), bradford["Cumulative"].tolist(),
+                                  zones=bradford["Zone"].tolist()),
+            "bradford_law", "brad")
     download_buttons(bradford, stem="bradford_law", key_prefix="br", sheet_name="Bradford")
 
 # --- Most relevant sources ---
 st.header("5 · Most relevant sources")
 if not sources.empty:
-    st.altair_chart(_bar(sources, "Source", "Documents", horizontal=True,
-                         height=28 * len(sources) + 40), use_container_width=True)
+    charts.render_chart(
+        charts.hbar(sources["Source"].tolist(), sources["Documents"].tolist(),
+                    title="Most relevant sources", xlabel="Documents"),
+        "most_relevant_sources", "src")
     st.dataframe(sources, use_container_width=True, hide_index=True)
     download_buttons(sources, stem="most_relevant_sources", key_prefix="src", sheet_name="Sources")
 
 # --- Sources local impact by h-index ---
 st.header("6 · Sources — local impact by h-index")
 if not hindex.empty:
-    st.altair_chart(_bar(hindex, "Source", "h-index", horizontal=True, color=_INDIGO,
-                         height=28 * len(hindex) + 40), use_container_width=True)
+    charts.render_chart(
+        charts.hbar(hindex["Source"].tolist(), hindex["h-index"].tolist(),
+                    title="Sources by local h-index", xlabel="h-index"),
+        "sources_h_index", "hx")
     st.dataframe(hindex, use_container_width=True, hide_index=True)
     download_buttons(hindex, stem="sources_h_index", key_prefix="hx", sheet_name="h-index")
 
