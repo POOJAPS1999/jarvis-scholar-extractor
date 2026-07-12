@@ -161,14 +161,34 @@ if uploaded is not None:
                             unsafe_allow_html=True)
             status_box.text(f"[{done}/{total}] {job.get('progress_message') or status}")
 
+            # Poll the backend for progress. Every network call here is
+            # wrapped: a transient blip talking to Railway must never throw an
+            # unhandled exception (that crashes the whole Streamlit app with
+            # "Error running app"). On repeated failures we stop watching and
+            # let the user refresh, rather than crashing.
+            consecutive_errors = 0
             for _ in range(150):  # ~5 minutes of active polling before we give up watching
                 time.sleep(2)
-                job = api_get(f"/jobs/{job_id}").json()
-                status = job["status"]
+                try:
+                    job = api_get(f"/jobs/{job_id}").json()
+                    consecutive_errors = 0
+                except Exception:
+                    consecutive_errors += 1
+                    if consecutive_errors >= 5:
+                        status_box.warning(
+                            "Lost contact with the backend while watching progress. "
+                            "The job keeps running — refresh this page to check again."
+                        )
+                        break
+                    continue
+                status = job.get("status", status)
                 total = job.get("total_rows") or total
                 done = job.get("done_rows") or done
-                progress_bar.progress(min(done / total, 1.0) if total else 0.0)
-                status_box.text(f"[{done}/{total}] {job.get('progress_message') or status}")
+                try:
+                    progress_bar.progress(min(done / total, 1.0) if total else 0.0)
+                    status_box.text(f"[{done}/{total}] {job.get('progress_message') or status}")
+                except Exception:
+                    pass
                 if status in ("completed", "failed"):
                     break
             loader.empty()
@@ -263,7 +283,13 @@ if uploaded is not None:
                         parts.append(f"{counts['retry']} queued for retry")
                     st.success("Applied: " + ", ".join(parts) if parts else "No changes applied.")
 
-                    if any(counts.get(k) for k in ("accept", "reject", "retry")):
+                    # Only a "Retry with corrected DOI" decision needs a real
+                    # re-run (the backend reports this via needs_requeue).
+                    # Accept/Reject are recorded straight into the output by
+                    # the backend with no re-extraction, so we must NOT requeue
+                    # for them - that was the bug where accepting a reviewed
+                    # row kicked off a full extraction again.
+                    if result.get("needs_requeue"):
                         api_post(f"/jobs/{job_id}/requeue")
                     st.rerun()
 

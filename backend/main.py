@@ -266,4 +266,40 @@ def submit_review(job_id: str, submission: ReviewSubmission):
         df_in.loc[mask, config.COL_DOI] = sno_str[mask].map(overrides)
         storage.save_dataframe_excel(job.input_key, df_in)
 
-    return {"counts": counts, "warnings": warnings, "queued_for_retry": list(overrides.keys())}
+    # A "Retry with corrected DOI" decision is the ONLY one that needs a
+    # real re-run (it has to re-fetch that row with the new DOI). Accept and
+    # Reject are pure bookkeeping on data we already have - they must NOT
+    # trigger another extraction. For those, regenerate the downloadable
+    # output straight from the (already-updated) checkpoint so the decision
+    # shows up immediately, with no fetch loop and no "running" state.
+    needs_requeue = bool(overrides)
+    if not needs_requeue:
+        _rebuild_output_from_checkpoint(job)
+
+    return {
+        "counts": counts,
+        "warnings": warnings,
+        "needs_requeue": needs_requeue,
+        "queued_for_retry": list(overrides.keys()),
+    }
+
+
+def _rebuild_output_from_checkpoint(job):
+    """Rewrite the job's output .xlsx directly from the current checkpoint,
+    ordered by the input file's Sno order — WITHOUT running the pipeline /
+    any network fetching. Used after Accept/Reject-only review decisions so
+    the manual-review Match Status ('Confirmed (manual review)' /
+    'Rejected (manual review)') lands in the downloadable file without
+    re-extracting anything. The checkpoint already carries exactly the
+    output columns (it was written by the same projection), so this is a
+    pure reorder-and-save."""
+    ckpt_df = storage.load_dataframe_csv(job.checkpoint_key, dtype={"Sno.": str})
+    try:
+        df_in = storage.load_dataframe_excel(job.input_key)
+        order = [str(s) for s in df_in[config.COL_SNO].tolist()]
+        pos = {s: i for i, s in enumerate(order)}
+        ckpt_df["_ord"] = ckpt_df["Sno."].astype(str).map(lambda s: pos.get(s, 10**9))
+        ckpt_df = ckpt_df.sort_values("_ord", kind="stable").drop(columns=["_ord"])
+    except Exception:
+        pass  # if input ordering can't be recovered, save in checkpoint order
+    storage.save_dataframe_excel(job.output_key, ckpt_df)

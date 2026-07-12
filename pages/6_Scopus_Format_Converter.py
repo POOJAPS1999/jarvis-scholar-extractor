@@ -91,9 +91,29 @@ if not present_hints:
 
 st.write(f"**{len(df)}** rows to convert.")
 
+# Rows the reviewer rejected (or that were de-duplicated) shouldn't feed a
+# downstream bibliometric analysis. Exclude them by default; the count is
+# reported so nothing disappears silently.
+drop_rejected = st.checkbox(
+    "Exclude rows rejected in manual review / marked duplicate", value=True,
+    help="Rows with Match Status 'Rejected (manual review)' or a 'Duplicate' "
+         "Dedup Status are left out of the Scopus output.",
+)
+
 if st.button("Convert to Scopus format", type="primary"):
+    work = df.copy()
+    n_excluded = 0
+    if drop_rejected:
+        mask_keep = pd.Series(True, index=work.index)
+        if "Match Status" in work.columns:
+            mask_keep &= ~work["Match Status"].astype(str).str.startswith("Rejected")
+        if "Dedup Status" in work.columns:
+            mask_keep &= ~work["Dedup Status"].astype(str).str.startswith("Duplicate")
+        n_excluded = int((~mask_keep).sum())
+        work = work[mask_keep]
+
     # Convert every row through the SAME function the in-flow export uses.
-    out_rows = [convert_row(rec) for rec in df.to_dict("records")]
+    out_rows = [convert_row(rec) for rec in work.to_dict("records")]
     out_df = pd.DataFrame(out_rows)
     for c in _ALL_OUT_COLS:
         if c not in out_df.columns:
@@ -107,10 +127,13 @@ if st.button("Convert to Scopus format", type="primary"):
 
     n_blank_eid = int((out_df["EID"].astype(str).str.strip() == "").sum())
     st.success(f"Converted {len(out_df)} rows to Scopus format.")
-    m = st.columns(3)
+    m = st.columns(4)
     m[0].metric("Rows", len(out_df))
-    m[1].metric("Scopus columns", len(SCOPUS_COLUMNS))
-    m[2].metric("Blank-EID rows", n_blank_eid)
+    m[1].metric("Excluded", n_excluded)
+    m[2].metric("Scopus columns", len(SCOPUS_COLUMNS))
+    m[3].metric("Blank-EID rows", n_blank_eid)
+    if n_excluded:
+        st.caption(f"{n_excluded} row(s) excluded (rejected in review / duplicate).")
     if n_blank_eid:
         st.caption(
             f"{n_blank_eid} row(s) have a blank EID — Biblioshiny will drop those "
