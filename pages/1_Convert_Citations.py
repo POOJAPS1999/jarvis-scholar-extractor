@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline.converters import medline_to_dataframe, ris_to_dataframe
 from bibliometric_pipeline.ui_helpers import download_buttons
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer, convert_citations_preview
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, jarvis_spinner, how_to_use, brand_footer, convert_citations_preview
 
 st.set_page_config(page_title="Jarvis Scholar - Convert Citations", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -76,7 +76,7 @@ fmt = st.radio(
 _loader = st.empty()
 _loader.markdown(reactor_loader_html(f"JARVIS is parsing your {fmt} file…"), unsafe_allow_html=True)
 try:
-    with st.spinner("Parsing records…"):
+    with jarvis_spinner("Parsing records…"):
         if fmt == "RIS":
             df = ris_to_dataframe(raw)
         else:

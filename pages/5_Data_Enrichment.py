@@ -18,7 +18,7 @@ import streamlit as st
 _HERE = os.path.dirname(os.path.abspath(__file__))
 import sys
 sys.path.insert(0, os.path.dirname(_HERE))
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, enrichment_template_bytes, how_to_use, brand_footer, enrichment_preview
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, jarvis_spinner, enrichment_template_bytes, how_to_use, brand_footer, enrichment_preview
 
 try:
     _secret_url = st.secrets.get("API_BASE_URL")
@@ -127,7 +127,7 @@ if uploaded is not None:
                  "general (non-ICMR) datasets.",
         )
         if st.button("Start extraction", type="primary"):
-            with st.spinner("Uploading and queueing job..."):
+            with jarvis_spinner("Uploading and queueing job..."):
                 try:
                     resp = api_post(
                         "/jobs",

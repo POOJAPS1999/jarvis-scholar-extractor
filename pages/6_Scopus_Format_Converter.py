@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from export_scopus_csv import convert_row, SCOPUS_COLUMNS, PROVENANCE_COLUMNS
 from bibliometric_pipeline.branding import (
-    THEME_CSS, scopus_input_template_bytes, reactor_loader_html, how_to_use, brand_footer,
+    THEME_CSS, scopus_input_template_bytes, reactor_loader_html, jarvis_spinner, how_to_use, brand_footer,
     scientometrics_preview,
 )
 from bibliometric_pipeline.ui_helpers import read_tabular_upload
@@ -121,7 +121,7 @@ if st.button("Convert to Scopus format", type="primary"):
     # Convert every row through the SAME function the in-flow export uses.
     _loader = st.empty()
     _loader.markdown(reactor_loader_html("JARVIS is building the Scopus CSV…"), unsafe_allow_html=True)
-    with st.spinner("Reformatting rows to Scopus columns…"):
+    with jarvis_spinner("Reformatting rows to Scopus columns…"):
         out_rows = [convert_row(rec) for rec in work.to_dict("records")]
     _loader.empty()
     out_df = pd.DataFrame(out_rows)

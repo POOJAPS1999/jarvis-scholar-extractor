@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline.sheet_merge import merge_sheets, JOIN_TYPES
 from bibliometric_pipeline.ui_helpers import download_buttons
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer, merge_example_bytes, merge_preview
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, jarvis_spinner, how_to_use, brand_footer, merge_example_bytes, merge_preview
 
 st.set_page_config(page_title="Jarvis Scholar - Merge Sheets", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -97,7 +97,7 @@ if st.button("Merge", type="primary"):
     _loader = st.empty()
     _loader.markdown(reactor_loader_html("JARVIS is merging your sheets…"), unsafe_allow_html=True)
     try:
-        with st.spinner("Joining rows…"):
+        with jarvis_spinner("Joining rows…"):
             merged, summary = merge_sheets(
                 df_a, df_b, left_on=left_on, right_on=right_on, how=how,
                 case_insensitive=case_insensitive, trim=trim,

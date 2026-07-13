@@ -24,7 +24,7 @@ from bibliometric_pipeline import charts
 from bibliometric_pipeline import networks as nw
 from bibliometric_pipeline import icmr_tables as it
 from bibliometric_pipeline.branding import (
-    THEME_CSS, reactor_loader_html, how_to_use, brand_footer, scopus_input_template_bytes,
+    THEME_CSS, reactor_loader_html, jarvis_spinner, how_to_use, brand_footer, scopus_input_template_bytes,
     scientometrics_preview,
 )
 from bibliometric_pipeline.ui_helpers import download_buttons, read_tabular_upload
@@ -101,7 +101,7 @@ _EMPTY = pd.DataFrame()
 _loader = st.empty()
 _loader.markdown(reactor_loader_html("JARVIS is computing scientometrics…"), unsafe_allow_html=True)
 _errs = {}
-with st.spinner("Crunching the corpus…"):
+with jarvis_spinner("Crunching the corpus…"):
     overview, _errs["Dataset overview"] = _safe(lambda: sci.dataset_overview(df), _EMPTY)
     missing, _errs["Missing data"] = _safe(lambda: sci.missing_data(df), _EMPTY)
     annual_prod, _errs["Annual production"] = _safe(lambda: sci.annual_production(df), _EMPTY)
@@ -235,7 +235,7 @@ if st.button("Generate map", type="primary", key="genmap"):
     _l = st.empty()
     _l.markdown(reactor_loader_html("JARVIS is mapping the network…"), unsafe_allow_html=True)
     try:
-        with st.spinner("Building the network…"):
+        with jarvis_spinner("Building the network…"):
             weight_name = "Documents"
             density = False
             if map_choice.startswith("Co-authorship"):
@@ -295,7 +295,7 @@ if st.session_state.get("_last_map_png"):
             _ai = st.empty()
             _ai.markdown(reactor_loader_html("JARVIS is reading the map…"), unsafe_allow_html=True)
             try:
-                with st.spinner("Interpreting…"):
+                with jarvis_spinner("Interpreting…"):
                     txt = interpret_figure(
                         st.session_state["_last_map_png"],
                         context=f"A {st.session_state.get('_last_map_label','network')} map from a "
@@ -340,7 +340,7 @@ if icmr_mode and it.has_required(df):
     st.caption("ICMR-specific tables (matches the ICMR bibliometric results document).")
     _li = st.empty()
     _li.markdown(reactor_loader_html("JARVIS is building the ICMR tables…"), unsafe_allow_html=True)
-    with st.spinner("Computing institute-level bibliometrics…"):
+    with jarvis_spinner("Computing institute-level bibliometrics…"):
         t3 = it.institute_benchmarking(df)
         t4_summary, _ = it.division_summary(df)
         t5, t5_overall = it.leadership_vs_contribution(df)

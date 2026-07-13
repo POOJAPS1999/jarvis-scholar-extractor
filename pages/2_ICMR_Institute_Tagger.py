@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from bibliometric_pipeline.icmr_institutes import resolve_all_icmr_institutes
 from bibliometric_pipeline import icmr_tables as it
 from bibliometric_pipeline.ui_helpers import download_buttons, read_tabular_upload
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer, icmr_tagger_template_bytes, icmr_tagger_preview
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, jarvis_spinner, how_to_use, brand_footer, icmr_tagger_template_bytes, icmr_tagger_preview
 
 st.set_page_config(page_title="Jarvis Scholar - ICMR Tagger", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -128,7 +128,7 @@ if st.button("Tag ICMR institutes", type="primary"):
     _loader = st.empty()
     _loader.markdown(reactor_loader_html("JARVIS is tagging ICMR institutes…"), unsafe_allow_html=True)
     out = df.copy()
-    with st.spinner("Resolving affiliations to ICMR institutes…"):
+    with jarvis_spinner("Resolving affiliations to ICMR institutes…"):
         out[_TAG_COL] = out.apply(resolve_row, axis=1)
     _loader.empty()
 
@@ -176,7 +176,7 @@ if st.button("Tag ICMR institutes", type="primary"):
     else:
         _l = st.empty()
         _l.markdown(reactor_loader_html("JARVIS is building the ICMR tables…"), unsafe_allow_html=True)
-        with st.spinner("Computing institute-level bibliometrics…"):
+        with jarvis_spinner("Computing institute-level bibliometrics…"):
             t3 = it.institute_benchmarking(out)
             t4_summary, t4_ref = it.division_summary(out)
             t5, t5_overall = it.leadership_vs_contribution(out)

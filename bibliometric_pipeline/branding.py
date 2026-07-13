@@ -145,6 +145,28 @@ a, a:hover, a:focus, a:active, a:visited,
 .js-card, .js-tool-card, .js-pipe-card,
 [data-testid="stSidebarNav"] a, [data-testid="stPageLink"] a {{ text-decoration: none !important; }}
 a:hover, .js-open:hover {{ text-decoration: none !important; }}
+
+/* Iron-Man mascot loader (replaces the default Streamlit spinner) */
+.jarvis-loader {{ display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:12px; padding:22px 10px 16px; }}
+.jarvis-loader .ji-stage {{ position:relative; width:128px; height:128px;
+  display:flex; align-items:center; justify-content:center; }}
+.jarvis-loader .ji-ring {{ position:absolute; width:120px; height:120px; border-radius:50%;
+  border:3.5px solid rgba(216,87,42,0.15); border-top-color:#d8572a; border-right-color:#e0a100;
+  animation:jiSpin 0.95s linear infinite; }}
+.jarvis-loader .ji-glow {{ position:absolute; width:86px; height:86px; border-radius:50%;
+  background:radial-gradient(circle, rgba(34,195,230,0.55), rgba(34,195,230,0) 70%);
+  animation:jiPulse 1.35s ease-in-out infinite; }}
+.jarvis-loader img.ji-hero {{ position:relative; z-index:2; width:82px; height:auto;
+  filter:drop-shadow(0 7px 9px rgba(0,0,0,0.18)); animation:jiFloat 1.5s ease-in-out infinite; }}
+.jarvis-loader .ji-text {{ font-family:{_SANS}; font-weight:700; color:var(--js-ink);
+  font-size:0.98rem; letter-spacing:.2px; text-align:center; }}
+.jarvis-loader .ji-text .ji-dots::after {{ display:inline-block; width:1.1em; text-align:left;
+  content:''; animation:jiDots 1.4s steps(1,end) infinite; }}
+@keyframes jiFloat {{ 0%,100% {{ transform:translateY(0); }} 50% {{ transform:translateY(-9px); }} }}
+@keyframes jiSpin  {{ to {{ transform:rotate(360deg); }} }}
+@keyframes jiPulse {{ 0%,100% {{ transform:scale(.82); opacity:.5; }} 50% {{ transform:scale(1.15); opacity:.95; }} }}
+@keyframes jiDots  {{ 0%{{content:'';}} 25%{{content:'.';}} 50%{{content:'..';}} 75%{{content:'...';}} 100%{{content:'';}} }}
 </style>
 """
 
@@ -185,6 +207,47 @@ def reactor_loader_html(label: str = "JARVIS is working…", size: int = 88) -> 
   </div>
 </div>
 """
+
+
+def jarvis_loader_html(label: str = "Working") -> str:
+    """Markup for the Iron-Man mascot loader (spinning HUD ring + floating
+    mascot + pulsing arc-reactor glow + animated dots). CSS lives in THEME_CSS."""
+    from .loader_asset import JARVIS_LOADER_PNG_B64
+    return (
+        '<div class="jarvis-loader">'
+        '<div class="ji-stage">'
+        '<div class="ji-ring"></div><div class="ji-glow"></div>'
+        f'<img class="ji-hero" alt="loading" '
+        f'src="data:image/png;base64,{JARVIS_LOADER_PNG_B64}"/>'
+        '</div>'
+        f'<div class="ji-text">{label}<span class="ji-dots"></span></div>'
+        '</div>'
+    )
+
+
+def jarvis_spinner(label: str = "Working…"):
+    """Drop-in replacement for `st.spinner(...)` that shows the Iron-Man mascot
+    loader instead of Streamlit's default spinner. Usage:
+
+        with jarvis_spinner("Crunching the corpus…"):
+            ...heavy work...
+    """
+    import streamlit as st
+    from contextlib import contextmanager
+
+    # strip a trailing ellipsis/… so we don't double up with the animated dots
+    clean = label.rstrip(" .…")
+
+    @contextmanager
+    def _cm():
+        holder = st.empty()
+        holder.markdown(jarvis_loader_html(clean), unsafe_allow_html=True)
+        try:
+            yield
+        finally:
+            holder.empty()
+
+    return _cm()
 
 
 def brand_footer(note: str = ""):

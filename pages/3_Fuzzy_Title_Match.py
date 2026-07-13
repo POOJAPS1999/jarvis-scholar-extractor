@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline.fuzzy_tools import cross_match, self_dedup
 from bibliometric_pipeline.ui_helpers import download_buttons, read_tabular_upload
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer, fuzzy_titles_template_bytes, fuzzy_preview
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, jarvis_spinner, how_to_use, brand_footer, fuzzy_titles_template_bytes, fuzzy_preview
 
 st.set_page_config(page_title="Jarvis Scholar - Fuzzy Title Match", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -93,7 +93,7 @@ if mode == "Compare two lists":
     if st.button("Run match", type="primary"):
         _loader = st.empty()
         _loader.markdown(reactor_loader_html("JARVIS is matching titles…"), unsafe_allow_html=True)
-        with st.spinner("Comparing every title in A against List B…"):
+        with jarvis_spinner("Comparing every title in A against List B…"):
             result = cross_match(df_a[col_a].tolist(), df_b[col_b].tolist(), threshold=threshold)
         _loader.empty()
         n_matched = int((result["Matched"] == "Yes").sum())
@@ -122,7 +122,7 @@ else:  # self-dedup
     if st.button("Find duplicates", type="primary"):
         _loader = st.empty()
         _loader.markdown(reactor_loader_html("JARVIS is scanning for duplicates…"), unsafe_allow_html=True)
-        with st.spinner("Comparing every pair of titles… (this can take a moment on long lists)"):
+        with jarvis_spinner("Comparing every pair of titles… (this can take a moment on long lists)"):
             result = self_dedup(df[col].tolist(), threshold=threshold)
         _loader.empty()
         if result.empty:

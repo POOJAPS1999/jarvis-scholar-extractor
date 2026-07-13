@@ -12,7 +12,7 @@ import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, how_to_use, brand_footer
+from bibliometric_pipeline.branding import THEME_CSS, reactor_loader_html, jarvis_spinner, how_to_use, brand_footer
 from bibliometric_pipeline.ai import interpret_figure
 
 st.set_page_config(page_title="Jarvis Scholar - AI Figure Interpreter", layout="wide")
@@ -40,7 +40,7 @@ if uploaded is not None:
         _loader = st.empty()
         _loader.markdown(reactor_loader_html("JARVIS is reading the figure…"), unsafe_allow_html=True)
         try:
-            with st.spinner("Interpreting…"):
+            with jarvis_spinner("Interpreting…"):
                 text = interpret_figure(
                     uploaded.getvalue(), context=context,
                     filename=uploaded.name, mime=uploaded.type or "image/png")
