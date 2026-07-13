@@ -148,22 +148,22 @@ a:hover, .js-open:hover {{ text-decoration: none !important; }}
 
 /* Iron-Man mascot loader (replaces the default Streamlit spinner) */
 .jarvis-loader {{ display:flex; flex-direction:column; align-items:center; justify-content:center;
-  gap:12px; padding:22px 10px 16px; }}
-.jarvis-loader .ji-stage {{ position:relative; width:128px; height:128px;
+  gap:8px; padding:14px 10px 10px; }}
+.jarvis-loader .ji-stage {{ position:relative; width:80px; height:80px;
   display:flex; align-items:center; justify-content:center; }}
-.jarvis-loader .ji-ring {{ position:absolute; width:120px; height:120px; border-radius:50%;
-  border:3.5px solid rgba(216,87,42,0.15); border-top-color:#d8572a; border-right-color:#e0a100;
+.jarvis-loader .ji-ring {{ position:absolute; width:74px; height:74px; border-radius:50%;
+  border:3px solid rgba(216,87,42,0.15); border-top-color:#d8572a; border-right-color:#e0a100;
   animation:jiSpin 0.95s linear infinite; }}
-.jarvis-loader .ji-glow {{ position:absolute; width:86px; height:86px; border-radius:50%;
+.jarvis-loader .ji-glow {{ position:absolute; width:52px; height:52px; border-radius:50%;
   background:radial-gradient(circle, rgba(34,195,230,0.55), rgba(34,195,230,0) 70%);
   animation:jiPulse 1.35s ease-in-out infinite; }}
-.jarvis-loader img.ji-hero {{ position:relative; z-index:2; width:82px; height:auto;
-  filter:drop-shadow(0 7px 9px rgba(0,0,0,0.18)); animation:jiFloat 1.5s ease-in-out infinite; }}
+.jarvis-loader img.ji-hero {{ position:relative; z-index:2; width:48px; height:auto;
+  filter:drop-shadow(0 5px 7px rgba(0,0,0,0.18)); animation:jiFloat 1.5s ease-in-out infinite; }}
 .jarvis-loader .ji-text {{ font-family:{_SANS}; font-weight:700; color:var(--js-ink);
-  font-size:0.98rem; letter-spacing:.2px; text-align:center; }}
+  font-size:0.9rem; letter-spacing:.2px; text-align:center; }}
 .jarvis-loader .ji-text .ji-dots::after {{ display:inline-block; width:1.1em; text-align:left;
   content:''; animation:jiDots 1.4s steps(1,end) infinite; }}
-@keyframes jiFloat {{ 0%,100% {{ transform:translateY(0); }} 50% {{ transform:translateY(-9px); }} }}
+@keyframes jiFloat {{ 0%,100% {{ transform:translateY(0); }} 50% {{ transform:translateY(-6px); }} }}
 @keyframes jiSpin  {{ to {{ transform:rotate(360deg); }} }}
 @keyframes jiPulse {{ 0%,100% {{ transform:scale(.82); opacity:.5; }} 50% {{ transform:scale(1.15); opacity:.95; }} }}
 @keyframes jiDots  {{ 0%{{content:'';}} 25%{{content:'.';}} 50%{{content:'..';}} 75%{{content:'...';}} 100%{{content:'';}} }}
