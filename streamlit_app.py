@@ -88,6 +88,9 @@ TOOLS = [
     {"href": "Scientific_Plot_Studio", "icon": "📊", "title": "Scientific Plot Studio",
      "desc": "~60 publication-ready plots from Excel templates — no code, no biostatistician.",
      "pills": ["PICK PLOT", "FILL TEMPLATE", "UPLOAD"], "tint": "#e6f7ee", "fg": "#1d9e75"},
+    {"href": "Statistics", "icon": "🧮", "title": "Statistics (no-code)",
+     "desc": "t-tests, ANOVA, regression, survival & more from Excel — APA output, assumption checks.",
+     "pills": ["PICK TEST", "FILL TEMPLATE", "APA RESULT"], "tint": "#e6f1fb", "fg": "#2563eb"},
 ]
 
 if query:
