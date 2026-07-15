@@ -49,8 +49,7 @@ query = hc2.text_input("Search modules", placeholder="Search modules…",
 
 TOOLS = [
     {"href": "Bibliometric_Analysis", "icon": "📚", "title": "Bibliometric Analysis",
-     "desc": "The full bibliometric pipeline — ingest, enrich, match, merge, tag, convert and visualize "
-             "(scientometrics tables, charts & VOSviewer maps).",
+     "desc": "All the bibliometric tools in one place — ingest, enrich, match, merge, tag, convert & visualize.",
      "pills": ["ENRICH", "SCIENTOMETRICS", "VOSVIEWER MAPS"], "tint": "#e6f1fb", "fg": "#2563eb"},
     {"href": "Scientific_Plot_Studio", "icon": "📊", "title": "Scientific Plot Studio",
      "desc": "~60 publication-ready plots from Excel templates — no code, no biostatistician.",
@@ -62,6 +61,27 @@ TOOLS = [
     {"href": "AI_Figure_Interpreter", "icon": "🤖", "title": "AI Figure Interpreter",
      "desc": "Upload any figure or map → a plain-language interpretation for your paper.",
      "pills": ["UPLOAD PNG / JPG"], "tint": "#fdeede", "fg": "#d8572a"},
+    {"href": "Data_Enrichment", "icon": "🗄", "title": "Data Enrichment",
+     "desc": "Title/DOI list → PubMed + OpenAlex + Crossref, merged per paper.",
+     "pills": ["NEEDS .XLSX", "SNO", "CLEAN TITLE", "DOI"], "tint": "#e6f1fb", "fg": "#2563eb"},
+    {"href": "Convert_Citations", "icon": "📄", "title": "Convert Citations",
+     "desc": "PubMed (MEDLINE) or RIS export → clean, pipeline-ready sheet.",
+     "pills": ["UPLOAD .TXT", ".NBIB", ".RIS"], "tint": "#fdeede", "fg": "#d8572a"},
+    {"href": "Fuzzy_Title_Match", "icon": "🔭", "title": "Fuzzy Title Match",
+     "desc": "Match titles by similarity — reconcile two lists or find duplicates.",
+     "pills": ["ONE OR TWO TITLE LISTS"], "tint": "#fce8ef", "fg": "#c0398b"},
+    {"href": "Merge_Sheets", "icon": "🧬", "title": "Merge Sheets",
+     "desc": "Join two sheets on matched column(s) — names can differ.",
+     "pills": ["TWO .XLSX / .CSV SHEETS"], "tint": "#e6f6f6", "fg": "#0e8a8a"},
+    {"href": "ICMR_Institute_Tagger", "icon": "🏛", "title": "ICMR Institute Tagger",
+     "desc": "Tag rows with their ICMR institute (former names, acronyms, multi-site).",
+     "pills": ["SHEET WITH AFFILIATIONS"], "tint": "#efe9fb", "fg": "#7d3c98"},
+    {"href": "Scopus_Format_Converter", "icon": "🛸", "title": "Scopus-format Converter",
+     "desc": "Enriched data → Biblioshiny / VOSviewer-ready Scopus CSV.",
+     "pills": ["UPLOAD ENRICHED .XLSX"], "tint": "#e6f7ee", "fg": "#1d9e75"},
+    {"href": "Scientometrics_Visualization", "icon": "📈", "title": "Scientometrics Visualization",
+     "desc": "Biblioshiny-style tables, charts, VOSviewer maps, thematic map.",
+     "pills": ["UPLOAD ENRICHED .XLSX"], "tint": "#e6f7ee", "fg": "#1d9e75"},
 ]
 
 if query:
