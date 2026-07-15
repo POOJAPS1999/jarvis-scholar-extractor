@@ -23,7 +23,7 @@ from bibliometric_pipeline.auth import require_login, sidebar_account
 require_login()
 sidebar_account()
 
-st.title("Statistics (no-code)")
+st.title("Statistics")
 st.caption("Pick a test → download its Excel template → upload your data → get an APA-style result with "
            "assumption checks, effect sizes and a plain-language verdict. No coding, no biostatistician.")
 
