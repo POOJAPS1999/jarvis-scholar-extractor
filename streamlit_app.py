@@ -85,6 +85,9 @@ TOOLS = [
     {"href": "AI_Figure_Interpreter", "icon": "🤖", "title": "AI Figure Interpreter",
      "desc": "Upload any figure or map → a plain-language interpretation for your paper.",
      "pills": ["UPLOAD PNG / JPG"], "tint": "#f3e9fb", "fg": "#7d3c98"},
+    {"href": "Scientific_Plot_Studio", "icon": "📊", "title": "Scientific Plot Studio",
+     "desc": "~60 publication-ready plots from Excel templates — no code, no biostatistician.",
+     "pills": ["PICK PLOT", "FILL TEMPLATE", "UPLOAD"], "tint": "#e6f7ee", "fg": "#1d9e75"},
 ]
 
 if query:
