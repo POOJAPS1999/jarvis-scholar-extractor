@@ -30,11 +30,125 @@ st.caption("Pick a test → download its Excel template → upload your data →
 cats = SL.by_category()
 cat_names = sorted(cats.keys(), key=lambda s: int(s.split(".")[0]))
 
+# Apply a wizard jump BEFORE the picker widgets are instantiated this run.
+if st.session_state.pop("_apply_wiz", False):
+    st.session_state["sl_cat"] = st.session_state.get("_wiz_cat")
+    st.session_state["sl_test"] = st.session_state.get("_wiz_test")
+    st.session_state.pop("sl_res", None)
+
+# ---- "Which test should I use?" wizard --------------------------------------
+with st.expander("🧭 Not sure which test? Answer a few questions", expanded=False):
+    rec_id = why = alt_id = None
+    goal = st.selectbox("What do you want to do?", [
+        "— select —",
+        "Compare groups or conditions",
+        "Measure a relationship between variables",
+        "Predict or model an outcome",
+        "Assess agreement or reliability",
+        "Evaluate a diagnostic test",
+        "Describe or summarise data",
+        "Check a statistical assumption",
+        "Plan sample size / power",
+    ], key="wz_goal")
+
+    if goal == "Compare groups or conditions":
+        otype = st.selectbox("What is the outcome?",
+                             ["Numeric (score / measurement)", "Categorical (yes/no, category)"], key="wz_ot")
+        if otype.startswith("Numeric"):
+            design = st.selectbox("Study design",
+                                  ["Independent groups", "Paired / repeated (same subjects)",
+                                   "One group vs a fixed value"], key="wz_des")
+            if design == "Independent groups":
+                ng = st.selectbox("How many groups?", ["2 groups", "3 or more groups"], key="wz_ng")
+                norm = st.selectbox("Is the outcome roughly normal (or n fairly large)?",
+                                    ["Yes / not sure", "No (skewed, small n, or ordinal)"], key="wz_nm")
+                if ng == "2 groups":
+                    if norm.startswith("Yes"):
+                        rec_id, why, alt_id = "ttest_ind", "two independent groups, numeric and ~normal → independent t-test (auto-switches to Welch if variances differ).", "mann_whitney"
+                    else:
+                        rec_id, why, alt_id = "mann_whitney", "two independent groups, non-normal/ordinal → Mann–Whitney U.", "ttest_ind"
+                else:
+                    if norm.startswith("Yes"):
+                        rec_id, why, alt_id = "anova_oneway", "3+ independent groups, ~normal → one-way ANOVA + Tukey.", "welch_anova"
+                    else:
+                        rec_id, why, alt_id = "kruskal", "3+ independent groups, non-normal → Kruskal–Wallis + Dunn.", "anova_oneway"
+            elif design.startswith("Paired"):
+                nc = st.selectbox("How many conditions?", ["2 conditions", "3 or more conditions"], key="wz_nc")
+                if nc == "2 conditions":
+                    norm = st.selectbox("Roughly normal differences?", ["Yes / not sure", "No"], key="wz_nm2")
+                    if norm.startswith("Yes"):
+                        rec_id, why, alt_id = "ttest_paired", "two related measurements, ~normal → paired t-test.", "wilcoxon"
+                    else:
+                        rec_id, why, alt_id = "wilcoxon", "two related measurements, non-normal → Wilcoxon signed-rank.", "ttest_paired"
+                else:
+                    rec_id, why = "friedman", "3+ repeated conditions (non-parametric) → Friedman test. (Repeated-measures ANOVA comes in Phase B.)"
+            else:
+                rec_id, why = "ttest_one", "comparing one sample's mean to a known value → one-sample t-test."
+        else:
+            kind = st.selectbox("What are you comparing?",
+                                ["Association between two categorical variables",
+                                 "Risk / odds between an exposure and an outcome (2×2)",
+                                 "Observed counts vs an expected distribution"], key="wz_ck")
+            if kind.startswith("Association"):
+                rec_id, why, alt_id = "chi_square", "association between two categorical variables → Chi-square (use Fisher's exact for small 2×2).", "fisher"
+            elif kind.startswith("Risk"):
+                rec_id, why = "riskratio", "exposure vs outcome in a 2×2 → risk ratio / odds ratio with 95% CI."
+            else:
+                rec_id, why = "gof", "observed vs expected counts → Chi-square goodness-of-fit."
+
+    elif goal == "Measure a relationship between variables":
+        hv = st.selectbox("How many variables?", ["Two variables", "Several variables"], key="wz_rel")
+        rec_id, why = (("correlation", "two variables → correlation (Pearson, plus Spearman/Kendall for ranked/non-linear).")
+                       if hv == "Two variables" else ("corr_matrix", "several variables → correlation matrix."))
+    elif goal == "Predict or model an outcome":
+        ot = st.selectbox("Outcome to predict", ["Numeric (continuous)", "Binary (yes/no, 0/1)"], key="wz_pred")
+        rec_id, why = (("linear_reg", "continuous outcome → linear regression.")
+                       if ot.startswith("Numeric") else ("logistic_reg", "binary outcome → logistic regression (odds ratios)."))
+    elif goal == "Assess agreement or reliability":
+        at = st.selectbox("What kind?",
+                          ["Two raters — numeric ratings", "Two raters — categorical labels",
+                           "Internal consistency of a multi-item scale"], key="wz_rel2")
+        rec_id, why = {"Two raters — numeric ratings": ("icc", "numeric ratings across raters → intraclass correlation (ICC)."),
+                       "Two raters — categorical labels": ("kappa", "categorical labels across two raters → Cohen's kappa."),
+                       "Internal consistency of a multi-item scale": ("cronbach", "multi-item scale → Cronbach's alpha.")}[at]
+    elif goal == "Evaluate a diagnostic test":
+        dt = st.selectbox("What do you have?",
+                          ["Test result vs truth (categorical)", "A continuous score vs truth"], key="wz_dx")
+        rec_id, why = (("diagnostic", "categorical test result vs truth → sensitivity / specificity / PPV / NPV.")
+                       if dt.startswith("Test result") else ("roc_auc", "continuous score vs truth → ROC / AUC with optimal cut-off."))
+    elif goal == "Describe or summarise data":
+        dd = st.selectbox("Data type", ["Numeric", "Categorical (counts)"], key="wz_desc")
+        rec_id, why = (("descriptives", "numeric summary → descriptives with 95% CI.")
+                       if dd == "Numeric" else ("crosstab", "categorical → cross-tabulation."))
+    elif goal == "Check a statistical assumption":
+        aa = st.selectbox("Which assumption?", ["Normality", "Equal variances across groups"], key="wz_as")
+        rec_id, why = (("shapiro", "normality → Shapiro–Wilk.")
+                       if aa == "Normality" else ("levene", "equal variances → Levene's test."))
+    elif goal == "Plan sample size / power":
+        rec_id, why = "power_ttest", "planning a two-group study → power / sample-size analysis."
+
+    if rec_id:
+        st.success(f"Recommended: **{SL.REGISTRY[rec_id].name}** — {why}")
+        if alt_id:
+            st.caption(f"Alternative to consider: {SL.REGISTRY[alt_id].name}.")
+        if st.button("Use this test →", type="primary", key="wz_use"):
+            cat_, name_ = SL.locate(rec_id)
+            st.session_state["_wiz_cat"] = cat_
+            st.session_state["_wiz_test"] = name_
+            st.session_state["_apply_wiz"] = True
+            st.rerun()
+
+# ---- picker (keyed so the wizard can pre-select) ----------------------------
+if st.session_state.get("sl_cat") not in cat_names:
+    st.session_state["sl_cat"] = cat_names[0]
 c1, c2 = st.columns(2)
-cat = c1.selectbox("Category", cat_names)
+cat = c1.selectbox("Category", cat_names, key="sl_cat")
 specs = sorted(cats[cat], key=lambda s: s.name)
 name_to_spec = {s.name: s for s in specs}
-test_name = c2.selectbox("Test", list(name_to_spec.keys()))
+test_names = list(name_to_spec.keys())
+if st.session_state.get("sl_test") not in test_names:
+    st.session_state["sl_test"] = test_names[0]
+test_name = c2.selectbox("Test", test_names, key="sl_test")
 spec = name_to_spec[test_name]
 
 st.markdown(f"**{spec.name}** — {spec.desc}")

@@ -100,6 +100,13 @@ def by_category() -> "dict[str, list[TestSpec]]":
     return out
 
 
+def locate(test_id: str):
+    """Return (category, display_name) for a test id — used by the wizard to
+    jump the picker to a recommended test."""
+    s = REGISTRY.get(test_id)
+    return (s.category, s.name) if s else (None, None)
+
+
 def template_bytes(spec: TestSpec) -> bytes:
     data = pd.DataFrame({c.name: spec.example.get(c.name, []) for c in spec.columns})
     info = pd.DataFrame({"Column": [c.name for c in spec.columns],
