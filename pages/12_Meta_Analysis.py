@@ -29,11 +29,14 @@ st.caption("Choose an effect measure → download its Excel template → upload 
            "estimate, forest & funnel plots, heterogeneity, publication-bias and sensitivity analyses, "
            "plus a metafor R script. Add optional Subgroup / Year / Moderator columns to unlock more.")
 
-names = {m.name: m for m in MA.MEASURES.values()}
-c1, c2, c3 = st.columns([2, 1, 1])
+cats = MA.by_category()
+c0, c1, c2, c3 = st.columns([1.4, 1.6, 1, 0.9])
+cat = c0.selectbox("What are you meta-analysing?", list(cats.keys()))
+names = {m.name: m for m in cats[cat]}
 meas = names[c1.selectbox("Effect measure", list(names.keys()))]
 model = "random" if c2.selectbox("Model", ["Random-effects (DL)", "Fixed-effect"]).startswith("Random") else "fixed"
 hksj = c3.checkbox("Knapp–Hartung", value=False, help="More conservative CI for few studies (random-effects only).")
+is_dta = meas.id == "dta"
 
 # ---- required columns + template ----
 cols_df = pd.DataFrame({"Column": [c for c, _ in meas.columns] + ["Subgroup", "Year", "Moderator"],
@@ -84,8 +87,12 @@ if st.button("📊 Run meta-analysis", type="primary", disabled=(df is None)):
     else:
         try:
             with jarvis_spinner("Pooling the studies…"):
-                res = MA.run(meas.id, df, model=model, hksj=hksj)
-                r_src = MA.r_script(meas.id, df, model=model, hksj=hksj)
+                if is_dta:
+                    res = MA.run_dta(df, model=model)
+                    r_src = MA.r_script_dta(df, model=model)
+                else:
+                    res = MA.run(meas.id, df, model=model, hksj=hksj)
+                    r_src = MA.r_script(meas.id, df, model=model, hksj=hksj)
             st.session_state["mr_res"] = res
             st.session_state["mr_id"] = meas.id
             st.session_state["mr_r"] = r_src
@@ -121,13 +128,14 @@ if res is not None and st.session_state.get("mr_id") == meas.id:
         d2.download_button("⬇ metafor R script (.R)", data=st.session_state["mr_r"].encode("utf-8"),
                            file_name=f"jarvis_meta_{meas.id}.R", mime="text/plain", width="stretch",
                            help="Reproduce this meta-analysis in RStudio with the metafor package.")
-    if st.button("🤖 Explain the forest plot with AI"):
+    if st.button("🤖 Explain the main figure with AI"):
         try:
             from bibliometric_pipeline.ai import interpret_figure
+            _first = next(iter(res.figures.values()))
             with jarvis_spinner("Interpreting…"):
-                text = interpret_figure(res.figures["Forest plot"],
-                                        context=f"Meta-analysis forest plot. {res.headline}",
-                                        filename="forest.png", mime="image/png")
+                text = interpret_figure(_first,
+                                        context=f"Meta-analysis figure. {res.headline}",
+                                        filename="figure.png", mime="image/png")
             st.markdown("**AI explanation.**")
             st.write(text)
             st.caption("AI-generated — verify against the numbers before quoting in a manuscript.")

@@ -626,3 +626,287 @@ def validate(meas: Measure, df: pd.DataFrame) -> "list[str]":
     if len(df.dropna(how="all")) < 2:
         problems.append("Meta-analysis needs at least 2 studies.")
     return problems
+
+
+# ===========================================================================
+# Publication-ready forest (meta::forest style) — overrides the earlier defs
+# ===========================================================================
+import re as _re
+STEEL, ORANGE = "#4682B4", "#E8912A"
+
+def _short(scale, mname):
+    if scale == "logit": return "Proportion"
+    if scale == "z":     return "Correlation"
+    m = _re.search(r"\(([^)]+)\)", mname)
+    return m.group(1) if m else mname
+
+def _forest(rows, scale, xlab, col_label, title="", pooled=None, het=None,
+            refx=None, xlim=None, xticks=None, weight_col=True):
+    """rows: list of dict(label, e, lo, hi, w). pooled: dict(label,e,lo,hi) or None."""
+    nrow = len(rows)
+    row_h = 0.34
+    fig_h = 1.6 + row_h*(nrow + (1.4 if pooled else 0))
+    fig = plt.figure(figsize=(11, fig_h), dpi=200)
+    bottom = 0.85/fig_h; top = 0.55/fig_h
+    ax = fig.add_axes([0.38, bottom, 0.27, 1-bottom-top])
+    ys = [nrow-1-i for i in range(nrow)]
+    ydia = -1.3
+    maxw = max([r.get("w") or 0 for r in rows] + [1e-9])
+    logx = scale == "log"
+    for r, y in zip(rows, ys):
+        ax.plot([r["lo"], r["hi"]], [y, y], color="black", lw=1, zorder=2)
+        for xx in (r["lo"], r["hi"]):
+            ax.plot([xx, xx], [y-0.14, y+0.14], color="black", lw=1, zorder=2)
+        s = 45 + (r["w"]/maxw)*320 if (weight_col and r.get("w")) else 70
+        ax.scatter([r["e"]], [y], marker="s", s=s, color=STEEL, edgecolor="black", lw=0.6, zorder=3)
+    if refx is not None:
+        ax.axvline(refx, color="black", ls=":", lw=1, zorder=1)
+    if pooled:
+        ax.add_patch(Polygon([(pooled["lo"], ydia), (pooled["e"], ydia+0.32),
+                              (pooled["hi"], ydia), (pooled["e"], ydia-0.32)],
+                             closed=True, facecolor=ORANGE, edgecolor="black", lw=0.8, zorder=4))
+    if logx:
+        ax.set_xscale("log")
+        from matplotlib.ticker import FixedLocator, NullLocator, FuncFormatter
+        loa = min(r["lo"] for r in rows); hia = max(r["hi"] for r in rows)
+        cand = [0.1, 0.125, 0.2, 0.25, 0.33, 0.5, 0.67, 1, 1.5, 2, 3, 4, 5, 8, 10]
+        ticks = [t for t in cand if loa*0.9 <= t <= hia*1.1] or [round(loa, 2), 1.0, round(hia, 2)]
+        ax.xaxis.set_major_locator(FixedLocator(ticks)); ax.xaxis.set_minor_locator(NullLocator())
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: ("%g" % v)))
+        ax.set_xlim(min(min(ticks), loa)*0.9, max(max(ticks), hia)*1.1)
+    else:
+        if xlim: ax.set_xlim(*xlim)
+        if xticks is not None: ax.set_xticks(xticks)
+    ax.set_ylim(ydia-0.9, nrow-0.4)
+    ax.set_yticks([]); ax.set_xlabel(xlab, fontsize=11, color=INK)
+    for sp in ("top", "right", "left"): ax.spines[sp].set_visible(False)
+    ax.tick_params(labelsize=10)
+    # ---- text columns (figure coords) ----
+    inv = fig.transFigure.inverted()
+    def fy(yd): return inv.transform(ax.transData.transform((ax.get_xlim()[0], yd)))[1]
+    xL, xE, xC, xW = 0.03, 0.72, 0.80, 0.965
+    for r, y in zip(rows, ys):
+        yy = fy(y)
+        fig.text(xL, yy, str(r["label"]), ha="left", va="center", fontsize=10, color=INK)
+        fig.text(xE, yy, f"{r['e']:.2f}", ha="right", va="center", fontsize=10, color=INK)
+        fig.text(xC, yy, f"[{r['lo']:.2f}; {r['hi']:.2f}]", ha="left", va="center", fontsize=10, color=INK)
+        if weight_col and r.get("w") is not None:
+            fig.text(xW, yy, f"{r['w']:.1f}%", ha="right", va="center", fontsize=10, color=INK)
+    if pooled:
+        yy = fy(ydia)
+        fig.text(xL, yy, pooled["label"], ha="left", va="center", fontsize=10.5, fontweight="bold", color=INK)
+        fig.text(xE, yy, f"{pooled['e']:.2f}", ha="right", va="center", fontsize=10.5, fontweight="bold", color=INK)
+        fig.text(xC, yy, f"[{pooled['lo']:.2f}; {pooled['hi']:.2f}]", ha="left", va="center", fontsize=10.5, fontweight="bold", color=INK)
+        if weight_col:
+            fig.text(xW, yy, "100.0%", ha="right", va="center", fontsize=10.5, fontweight="bold", color=INK)
+    # header
+    yh = fy(nrow-0.4) + 0.012
+    fig.text(xL, yh, "Study", ha="left", va="bottom", fontsize=11, fontweight="bold", color=INK)
+    fig.text(xE, yh, col_label, ha="right", va="bottom", fontsize=11, fontweight="bold", color=INK)
+    fig.text(xC, yh, "95% CI", ha="left", va="bottom", fontsize=11, fontweight="bold", color=INK)
+    if weight_col:
+        fig.text(xW, yh, "Weight", ha="right", va="bottom", fontsize=11, fontweight="bold", color=INK)
+    if het:
+        fig.text(xL, fy(ydia)-0.055, het, ha="left", va="top", fontsize=9, color=SUB)
+    if title:
+        fig.text(xL, 0.985, title, ha="left", va="top", fontsize=12.5, fontweight="bold", color=INK)
+    _wm(fig); return fig_to_png(fig, dpi=200)
+
+
+def _het_str(res):
+    tau = f"{res['tau2']:.4f}".rstrip("0").rstrip(".")
+    return (f"Heterogeneity: I² = {res['I2']:.1f}%, τ² = {tau}, "
+            f"Q({res['df']}) = {res['Q']:.2f}, p = {res['Qp']:.4f}")
+
+def forest_plot(labels, yi, vi, res, scale, mname, title="", pooled_label=None,
+                xlab=None, col_label=None):
+    k = len(yi); sei = np.sqrt(vi)
+    ed, lo, hi = disp(scale, yi), disp(scale, yi-Z*sei), disp(scale, yi+Z*sei)
+    w = res.get("weights")
+    if w is None or len(w) != k:
+        w = 100*(1/vi)/np.sum(1/vi)
+    rows = [{"label": labels[i], "e": ed[i], "lo": lo[i], "hi": hi[i], "w": w[i]} for i in range(k)]
+    pe, pl, ph = disp(scale, res["est"]), disp(scale, res["ci"][0]), disp(scale, res["ci"][1])
+    plab = pooled_label or ("Random effects model" if res.get("model") != "fixed" else "Fixed effect model")
+    pooled = {"label": plab, "e": pe, "lo": pl, "hi": ph}
+    if scale == "log": refx, xlim, xticks = 1.0, None, None
+    elif scale == "raw": refx, xlim, xticks = 0.0, None, None
+    elif scale == "logit": refx, xlim, xticks = pe, (0, 1), np.arange(0, 1.01, 0.2)
+    else: refx, xlim, xticks = pe, (-1, 1), np.arange(-1, 1.01, 0.5)
+    return _forest(rows, scale, xlab or _short(scale, mname), col_label or _short(scale, mname),
+                   title=title, pooled=pooled, het=_het_str(res), refx=refx, xlim=xlim, xticks=xticks)
+
+
+def _loo_forest(labels, rows_in, res, scale):
+    ed = disp(scale, np.array([r[1] for r in rows_in]))
+    lo = disp(scale, np.array([r[2] for r in rows_in])); hi = disp(scale, np.array([r[3] for r in rows_in]))
+    rows = [{"label": f"Omitting {labels[rows_in[i][0]]}", "e": ed[i], "lo": lo[i], "hi": hi[i], "w": None}
+            for i in range(len(rows_in))]
+    refx = disp(scale, res["est"])
+    xlim = (0, 1) if scale == "logit" else None
+    return _forest(rows, scale, "Effect (leave-one-out)", _short(scale, ""), title="Leave-one-out analysis",
+                   pooled=None, refx=refx, xlim=xlim, weight_col=False)
+
+def _cumulative_forest(labels, rows_in, order_idx, scale):
+    ed = disp(scale, np.array([r[1] for r in rows_in]))
+    lo = disp(scale, np.array([r[2] for r in rows_in])); hi = disp(scale, np.array([r[3] for r in rows_in]))
+    rows = [{"label": f"+ {labels[order_idx[i]]}", "e": ed[i], "lo": lo[i], "hi": hi[i], "w": None}
+            for i in range(len(rows_in))]
+    refx = 1.0 if scale == "log" else (0.0 if scale == "raw" else None)
+    xlim = (0, 1) if scale == "logit" else None
+    return _forest(rows, scale, "Cumulative effect", _short(scale, ""), title="Cumulative meta-analysis",
+                   pooled=None, refx=refx, xlim=xlim, weight_col=False)
+
+
+# ===========================================================================
+# Categories + Diagnostic Test Accuracy (DTA) meta-analysis
+# ===========================================================================
+CAT_ORDER = ["Intervention (two groups)", "Prognostic / survival",
+             "Prevalence / single proportion", "Correlation",
+             "Pre-post (single arm)", "Diagnostic accuracy (DTA)", "Generic (effect + CI)"]
+CATEGORY = {"md": CAT_ORDER[0], "smd": CAT_ORDER[0], "or": CAT_ORDER[0], "rr": CAT_ORDER[0],
+            "rd": CAT_ORDER[0], "irr": CAT_ORDER[0], "hr": CAT_ORDER[1], "prop": CAT_ORDER[2],
+            "cor": CAT_ORDER[3], "prepost": CAT_ORDER[4], "dta": CAT_ORDER[5], "generic": CAT_ORDER[6]}
+
+# DTA measure (special flow; compute unused — page dispatches to run_dta)
+_DTA_EX = {"Study": ["Combaret 2002","Shirai 2022","Kahana-Edwin 2021","Iehara 2019","Chicard 2018",
+                     "Lodrini 2017","Chicard 2016","Yagyu 2016","Ruas 2023","Kurihara 2015",
+                     "Gotoh 2005","Combaret 2009","Kojima 2013","Ma 2016"],
+           "TP": [31,10,7,10,10,5,22,49,4,2,17,53,16,9], "FP": [1,0,0,0,0,0,0,5,2,0,0,0,0,2],
+           "FN": [1,0,0,0,0,0,1,8,1,0,0,20,0,1], "TN": [69,12,12,33,9,5,47,86,3,8,70,194,34,93]}
+_reg(Measure("dta", "Diagnostic accuracy (sensitivity / specificity / SROC)", "logit",
+    [("Study", "Study label"), ("TP", "True positives"), ("FP", "False positives"),
+     ("FN", "False negatives"), ("TN", "True negatives")],
+    _DTA_EX, lambda df: (None, None, None, {}), "SENS", binary=True))
+
+def by_category():
+    out = {c: [] for c in CAT_ORDER}
+    for mid, m in MEASURES.items():
+        out[CATEGORY.get(mid, CAT_ORDER[-1])].append(m)
+    return {c: v for c, v in out.items() if v}
+
+
+def _prop_ma(labels, ev, n, model, metric):
+    ev = np.asarray(ev, float); n = np.asarray(n, float)
+    evc = np.clip(ev, 0.5, n-0.5); p = evc/n
+    yi = np.log(p/(1-p)); vi = 1/(n*p*(1-p))
+    r = pool(yi, vi, model)
+    png = forest_plot(labels, yi, vi, r, "logit", "Proportion", xlab=metric, col_label="Proportion")
+    return png, r, yi, vi
+
+def _sroc_plot(TP, FP, FN, TN, sens_disp, spec_disp):
+    tp, fp, fn, tn = TP+0.5, FP+0.5, FN+0.5, TN+0.5
+    TPR = tp/(tp+fn); FPR = fp/(fp+tn); N = TP+FP+FN+TN
+    lt = np.log(TPR/(1-TPR)); lf = np.log(FPR/(1-FPR))
+    D = lt-lf; S = lt+lf
+    slope, intercept = np.polyfit(S, D, 1)
+    fg = np.linspace(0.005, 0.995, 200); lfg = np.log(fg/(1-fg))
+    ltg = intercept/(1-slope) + (1+slope)/(1-slope)*lfg
+    tg = 1/(1+np.exp(-ltg))
+    fig, ax = plt.subplots(figsize=(6.4, 6.2), dpi=200)
+    ax.plot(fg, tg, color=RED, lw=2, zorder=2, label="SROC curve")
+    sizes = 30 + 240*np.sqrt(N)/np.sqrt(N.max())
+    ax.scatter(FPR, TPR, s=sizes, facecolor=STEEL, edgecolor="black", lw=0.6, alpha=0.85, zorder=3)
+    ax.scatter([1-spec_disp], [sens_disp], marker="*", s=420, color=ORANGE, edgecolor="black",
+               lw=0.8, zorder=4, label="Summary point")
+    ax.plot([0, 1], [0, 1], color=GREY, ls=":", lw=1)
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1); ax.set_aspect("equal")
+    ax.set_xlabel("False positive rate (1 − specificity)", fontsize=11, color=INK)
+    ax.set_ylabel("Sensitivity", fontsize=11, color=INK)
+    ax.set_title("Summary ROC (Moses–Littenberg)", fontsize=12.5, fontweight="bold", color=INK)
+    ax.legend(frameon=False, fontsize=9, loc="lower right")
+    for s in ("top", "right"): ax.spines[s].set_visible(False)
+    fig.tight_layout(); _wm(fig); return fig_to_png(fig, dpi=200)
+
+def _deeks_plot(labels, TP, FP, FN, TN):
+    tp, fp, fn, tn = TP+0.5, FP+0.5, FN+0.5, TN+0.5
+    DOR = (tp*tn)/(fp*fn); logDOR = np.log(DOR)
+    ndis = tp+fn; nnon = fp+tn; ESS = 4*ndis*nnon/(ndis+nnon); inv = 1/np.sqrt(ESS)
+    W = ESS; X = np.column_stack([np.ones_like(inv), inv])
+    XtWX = X.T@(W[:, None]*X); beta = np.linalg.solve(XtWX, X.T@(W*logDOR))
+    resid = logDOR - X@beta; dof = len(inv)-2
+    s2 = np.sum(W*resid**2)/dof; cov = s2*np.linalg.inv(XtWX); se = np.sqrt(np.diag(cov))
+    p = 2*(1-stats.t.cdf(abs(beta[1]/se[1]), dof))
+    fig, ax = plt.subplots(figsize=(7, 5.4), dpi=200)
+    ax.scatter(inv, logDOR, s=55, facecolor=STEEL, edgecolor="black", lw=0.6, zorder=3)
+    xs = np.linspace(inv.min(), inv.max(), 50)
+    ax.plot(xs, beta[0]+beta[1]*xs, color=RED, lw=1.4)
+    ax.set_xlabel("1 / √(Effective sample size)", fontsize=11, color=INK)
+    ax.set_ylabel("ln(Diagnostic odds ratio)", fontsize=11, color=INK)
+    ax.set_title(f"Deeks' funnel plot (asymmetry p = {p:.3f})", fontsize=12, fontweight="bold", color=INK)
+    for s in ("top", "right"): ax.spines[s].set_visible(False)
+    fig.tight_layout(); _wm(fig); return fig_to_png(fig, dpi=200), p
+
+
+def run_dta(df, model="random"):
+    TP = _num(_col(df, "TP")); FP = _num(_col(df, "FP")); FN = _num(_col(df, "FN")); TN = _num(_col(df, "TN"))
+    ok = TP.notna() & FP.notna() & FN.notna() & TN.notna()
+    labels = [l for l, o in zip(_labels(df), ok) if o]
+    TP, FP, FN, TN = TP[ok].values, FP[ok].values, FN[ok].values, TN[ok].values
+    k = len(labels)
+    sens_png, sens_r, sy, sv = _prop_ma(labels, TP, TP+FN, model, "Sensitivity")
+    spec_png, spec_r, py, pv = _prop_ma(labels, TN, TN+FP, model, "Specificity")
+    conc_png, conc_r, cy, cv = _prop_ma(labels, TP+TN, TP+FP+FN+TN, model, "Concordance")
+    sens_d = disp("logit", sens_r["est"]); spec_d = disp("logit", spec_r["est"])
+    sroc_png = _sroc_plot(TP, FP, FN, TN, sens_d, spec_d)
+    deeks_png, deeks_p = _deeks_plot(labels, TP, FP, FN, TN)
+    loo_s = _loo_forest(labels, leave_one_out(sy, sv, model), sens_r, "logit")
+    loo_p = _loo_forest(labels, leave_one_out(py, pv, model), spec_r, "logit")
+    figs = {"Sensitivity forest": sens_png, "Specificity forest": spec_png,
+            "Concordance forest": conc_png, "Summary ROC (SROC)": sroc_png,
+            "Deeks' funnel plot": deeks_png,
+            "Leave-one-out (sensitivity)": loo_s, "Leave-one-out (specificity)": loo_p}
+    def ci(r): return f"[{disp('logit', r['ci'][0]):.2f}, {disp('logit', r['ci'][1]):.2f}]"
+    dor = (sens_d/(1-sens_d)) / ((1-spec_d)/spec_d)
+    extras = {"Pooled sensitivity": f"{sens_d:.3f} {ci(sens_r)}",
+              "Pooled specificity": f"{spec_d:.3f} {ci(spec_r)}",
+              "Diagnostic odds ratio": f"{dor:.1f}",
+              "Deeks' asymmetry test": f"p = {deeks_p:.3f} (" + ("no strong evidence of" if deeks_p >= .05 else "possible") + " publication bias)"}
+    table = pd.DataFrame({"Study": labels, "TP": TP.astype(int), "FP": FP.astype(int),
+                          "FN": FN.astype(int), "TN": TN.astype(int),
+                          "Sensitivity": [f"{t/(t+f):.2f}" for t, f in zip(TP, FN)],
+                          "Specificity": [f"{n/(n+p):.2f}" for n, p in zip(TN, FP)]})
+    head = (f"DTA meta-analysis (k = {k}): pooled sensitivity {sens_d:.2f} {ci(sens_r)}, "
+            f"specificity {spec_d:.2f} {ci(spec_r)}")
+    interp = (f"Across {k} studies, pooled sensitivity was {sens_d:.2f} and specificity {spec_d:.2f} "
+              f"(diagnostic odds ratio {dor:.1f}). The SROC summarises the joint accuracy; "
+              f"Deeks' test p = {deeks_p:.3f}.")
+    caveats = ["SROC uses the Moses–Littenberg model; the R export runs the bivariate/HSROC (mada::reitsma) model.",
+               "Studies with a zero cell receive a 0.5 continuity correction."]
+    return MetaResult(head, sens_r, table, interp, figs, extras, caveats)
+
+
+def r_script_dta(df, model="random"):
+    from .r_export import df_to_r
+    TP = _num(_col(df, "TP")); FP = _num(_col(df, "FP")); FN = _num(_col(df, "FN")); TN = _num(_col(df, "TN"))
+    ok = TP.notna() & FP.notna() & FN.notna() & TN.notna()
+    dat = pd.DataFrame({"study": [l for l, o in zip(_labels(df), ok) if o],
+                        "TP": TP[ok].astype(int).values, "FP": FP[ok].astype(int).values,
+                        "FN": FN[ok].astype(int).values, "TN": TN[ok].astype(int).values})
+    from .r_export import _header
+    return "\n".join([
+        _header("Diagnostic test accuracy meta-analysis", ["meta", "mada", "ggplot2", "ggrepel"]),
+        df_to_r(dat, "d"), "",
+        '# --- Sensitivity & Specificity forests (meta::metaprop, PLOGIT) ---',
+        'm_sens <- metaprop(TP, TP+FN, studlab=study, data=d, sm="PLOGIT", method.tau="DL", random=TRUE, common=FALSE)',
+        'meta::forest(m_sens, xlim=c(0,1), rightcols=c("effect","ci","w.random"), xlab="Sensitivity", col.diamond="orange", col.square="steelblue")',
+        'm_spec <- metaprop(TN, TN+FP, studlab=study, data=d, sm="PLOGIT", method.tau="DL", random=TRUE, common=FALSE)',
+        'meta::forest(m_spec, xlim=c(0,1), rightcols=c("effect","ci","w.random"), xlab="Specificity", col.diamond="orange", col.square="steelblue")',
+        'm_conc <- metaprop(TP+TN, TP+FP+FN+TN, studlab=study, data=d, sm="PLOGIT", method.tau="DL", random=TRUE, common=FALSE)',
+        'meta::forest(m_conc, xlim=c(0,1), xlab="Concordance", col.diamond="orange", col.square="steelblue")',
+        "",
+        '# --- Bivariate / HSROC model + SROC curve (mada::reitsma) ---',
+        'dm <- data.frame(TP=d$TP, FP=d$FP, FN=d$FN, TN=d$TN)',
+        'fit <- reitsma(dm, correction=0.5, correction.control="all"); print(summary(fit))',
+        'plot(fit, sroclwd=2, xlim=c(0,1), ylim=c(0,1)); ROCellipse(fit, add=TRUE, col="firebrick")',
+        "",
+        "# --- Deeks' funnel plot for publication bias ---",
+        'd2 <- transform(d, DOR=((TP+.5)*(TN+.5))/((FP+.5)*(FN+.5)),',
+        '                ESS=4*((TP+.5)+(FN+.5))*((FP+.5)+(TN+.5))/(((TP+.5)+(FN+.5))+((FP+.5)+(TN+.5))))',
+        'd2$logDOR <- log(d2$DOR); d2$inv <- 1/sqrt(d2$ESS)',
+        'summary(lm(logDOR ~ inv, data=d2, weights=ESS))   # slope p = Deeks asymmetry',
+        "",
+        "# --- Leave-one-out sensitivity/specificity ---",
+        'meta::forest(metainf(m_sens, pooled="random"), xlab="Sensitivity (leave-one-out)")',
+        'meta::forest(metainf(m_spec, pooled="random"), xlab="Specificity (leave-one-out)")',
+    ]) + "\n"
