@@ -99,7 +99,7 @@ def _auth_screen():
         "<div style='font-family:Inter,\"Segoe UI\",sans-serif;font-size:1.7rem;font-weight:800;color:#12283b;'>"
         "Welcome to Jarvis Scholar</div>"
         "<div style='color:#54708a;font-family:Inter,\"Segoe UI\",sans-serif;margin-top:2px;'>"
-        "Please sign in or create an account to open your no-code research analytics workbench.</div></div>",
+        "Please sign in or create an account to open your research analytics workbench.</div></div>",
         unsafe_allow_html=True,
     )
     st.write("")

@@ -35,7 +35,7 @@ with st.sidebar:
                 "Built for researchers, by researchers.</div>", unsafe_allow_html=True)
 
 st.markdown(hero_html_v2("Jarvis Scholar",
-                         "Your no-code research analytics workbench — bibliometrics · plots · statistics · AI"),
+                         "Your research analytics workbench — bibliometrics · plots · statistics · AI"),
             unsafe_allow_html=True)
 
 # auth token → appended to card links so a click (full reload) keeps you logged in
