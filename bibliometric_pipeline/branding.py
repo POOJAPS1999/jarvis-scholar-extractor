@@ -22,28 +22,32 @@ import io
 
 import pandas as pd
 
-_SANS = "'Segoe UI', 'Helvetica Neue', Arial, system-ui, sans-serif"
-_SERIF = "Georgia, 'Times New Roman', 'Iowan Old Style', serif"
+_SANS = "'Inter', 'Segoe UI', 'Helvetica Neue', Arial, system-ui, sans-serif"
+_SERIF = "'Inter', 'Segoe UI', Arial, system-ui, sans-serif"
 
 # ---------------------------------------------------------------------
 # Global theme CSS
 # ---------------------------------------------------------------------
 THEME_CSS = f"""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 :root {{
-  --js-cyan: #0e7f9c;
+  --js-cyan: #0fb5d6;
+  --js-cyan-deep: #0e7f9c;
   --js-cyan-soft: #7fd3e6;
+  --js-blue: #2563eb;
   --js-indigo: #4f46e5;
   --js-ink: #12283b;
-  --js-sub: #4a627a;
-  --js-line: #d6e3f2;
+  --js-sub: #54708a;
+  --js-line: #e4eef7;
+  --js-line-2: #d3e3f1;
   --js-panel: #ffffff;
-  --js-bg: #eff5fc;
+  --js-bg: #f7fbfe;
 }}
 .stApp {{
   background:
-    radial-gradient(1100px 520px at 12% -8%, rgba(79,70,229,0.06), transparent 60%),
-    radial-gradient(900px 460px at 100% 0%, rgba(14,127,156,0.08), transparent 55%),
+    radial-gradient(60% 40% at 82% -6%, rgba(15,181,214,0.07), transparent 60%),
+    radial-gradient(52% 38% at 8% 2%, rgba(37,99,235,0.05), transparent 60%),
     var(--js-bg);
 }}
 /* Serif body / subtext, crisp sans headings */
@@ -167,6 +171,48 @@ a:hover, .js-open:hover {{ text-decoration: none !important; }}
 @keyframes jiSpin  {{ to {{ transform:rotate(360deg); }} }}
 @keyframes jiPulse {{ 0%,100% {{ transform:scale(.82); opacity:.5; }} 50% {{ transform:scale(1.15); opacity:.95; }} }}
 @keyframes jiDots  {{ 0%{{content:'';}} 25%{{content:'.';}} 50%{{content:'..';}} 75%{{content:'...';}} 100%{{content:'';}} }}
+
+/* ===== v3 design-system refinements (match the landing page) ===== */
+h1, h2, h3, h4 {{ font-weight:800; letter-spacing:-.01em; }}
+[data-testid="stMain"] .block-container {{ max-width:1180px; padding-top:2.0rem; padding-bottom:3rem; }}
+
+/* Buttons → cyan gradient for primary/submit, rounded + lift for all */
+.stButton > button, .stDownloadButton > button, [data-testid="stFormSubmitButton"] button {{
+  font-family:{_SANS} !important; font-weight:600 !important; border-radius:11px !important;
+  transition:transform .16s ease, box-shadow .22s ease, background .2s ease, filter .2s ease; }}
+.stButton > button:hover, .stDownloadButton > button:hover, [data-testid="stFormSubmitButton"] button:hover {{ transform:translateY(-1px); }}
+button[kind="primary"], [data-testid="stBaseButton-primary"], [data-testid="baseButton-primary"], [data-testid="stFormSubmitButton"] button {{
+  background:linear-gradient(180deg, var(--js-cyan), var(--js-cyan-deep)) !important;
+  color:#fff !important; border:none !important; box-shadow:0 8px 20px rgba(15,181,214,.28) !important; }}
+button[kind="primary"]:hover, [data-testid="stBaseButton-primary"]:hover, [data-testid="stFormSubmitButton"] button:hover {{
+  box-shadow:0 12px 26px rgba(15,181,214,.42) !important; filter:brightness(1.03); }}
+
+/* Inputs / selects → rounded, cyan focus ring */
+[data-baseweb="input"], [data-baseweb="textarea"], [data-baseweb="select"] > div {{ border-radius:10px !important; }}
+[data-baseweb="input"] input:focus, [data-baseweb="textarea"] textarea:focus, textarea:focus, .stNumberInput input:focus {{
+  box-shadow:0 0 0 3px rgba(15,181,214,.18) !important; }}
+[data-baseweb="base-input"]:focus-within {{ border-color:var(--js-cyan) !important; }}
+
+/* Tabs → cyan active */
+[data-baseweb="tab"][aria-selected="true"] {{ color:var(--js-cyan-deep) !important; }}
+[data-baseweb="tab-highlight"] {{ background:var(--js-cyan) !important; }}
+
+/* Expanders, alerts, dataframes, uploader */
+[data-testid="stExpander"] {{ border:1px solid var(--js-line) !important; border-radius:14px !important; box-shadow:0 1px 2px rgba(18,40,59,.04); }}
+[data-testid="stExpander"] summary:hover {{ color:var(--js-cyan-deep); }}
+[data-testid="stAlert"] {{ border-radius:12px; }}
+[data-testid="stDataFrame"] {{ border-radius:12px; overflow:hidden; border:1px solid var(--js-line); }}
+[data-testid="stFileUploaderDropzone"] {{ border-radius:14px !important; border:1.5px dashed var(--js-line-2) !important; background:#fbfdff !important; }}
+
+/* Cards → softer resting shadow + landing-style hover glow */
+.js-tool-card, .js-pipe-card, .js-card {{ box-shadow:0 10px 30px rgba(18,40,59,.07) !important; }}
+.js-tool-card:hover, .js-card:hover {{ border-color:transparent !important;
+  box-shadow:0 22px 56px rgba(18,40,59,.14), inset 0 0 0 1px rgba(15,181,214,.35), 0 0 38px rgba(15,181,214,.12) !important; }}
+.js-pipe-card:hover {{ border-color:transparent !important;
+  box-shadow:0 16px 40px rgba(18,40,59,.12), inset 0 0 0 1px rgba(15,181,214,.30) !important; }}
+
+/* Sidebar polish */
+[data-testid="stSidebar"] {{ background:#fbfdff; border-right:1px solid var(--js-line); }}
 </style>
 """
 
