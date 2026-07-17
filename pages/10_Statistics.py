@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline.branding import THEME_CSS, jarvis_spinner, how_to_use, brand_footer
 from bibliometric_pipeline import stats_lab as SL
+from bibliometric_pipeline import r_export as RX
 
 st.set_page_config(page_title="Jarvis Scholar - Statistics", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -217,6 +218,10 @@ if st.button("🧮 Run analysis", type="primary", disabled=not ready):
             st.session_state["sl_res"] = res
             st.session_state["sl_id"] = spec.id
             st.session_state["sl_name"] = spec.name
+            try:
+                st.session_state["sl_r"] = RX.stat_r_script(spec, df if spec.needs_data else None, params)
+            except Exception:
+                st.session_state["sl_r"] = None
         except Exception as e:
             st.error(f"Could not run this test with the data provided: {e}")
             st.caption("Tip: download the template above and match the column names/types exactly.")
@@ -236,12 +241,16 @@ if res is not None and st.session_state.get("sl_id") == spec.id:
     if res.figure_png:
         st.image(res.figure_png, use_container_width=True)
 
-    d1, d2 = st.columns(2)
-    d1.download_button("⬇ Download report (.txt)", data=res.report_text(spec.name).encode("utf-8"),
+    d1, d2, d3 = st.columns(3)
+    d1.download_button("⬇ Report (.txt)", data=res.report_text(spec.name).encode("utf-8"),
                        file_name=f"jarvis_{spec.id}_report.txt", mime="text/plain",
                        use_container_width=True)
+    if st.session_state.get("sl_r"):
+        d2.download_button("⬇ R script (.R)", data=st.session_state["sl_r"].encode("utf-8"),
+                           file_name=f"jarvis_{spec.id}.R", mime="text/plain",
+                           use_container_width=True, help="Reproduce this exact result in RStudio.")
     if res.figure_png:
-        d2.download_button("⬇ Download figure (PNG)", data=res.figure_png,
+        d3.download_button("⬇ Figure (PNG)", data=res.figure_png,
                            file_name=f"jarvis_{spec.id}.png", mime="image/png", use_container_width=True)
     if st.button("🤖 Explain this result in plain English (AI)"):
         try:

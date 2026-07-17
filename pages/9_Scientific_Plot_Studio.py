@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bibliometric_pipeline.branding import THEME_CSS, jarvis_spinner, how_to_use, brand_footer
 from bibliometric_pipeline import plot_studio as PS
+from bibliometric_pipeline import r_export as RX
 
 st.set_page_config(page_title="Jarvis Scholar - Scientific Plot Studio", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -127,6 +128,10 @@ if st.button("📊 Generate figure", type="primary", disabled=(df is None)):
             st.session_state["ps_png"] = png
             st.session_state["ps_id"] = spec.id
             st.session_state["ps_ctx"] = f"{spec.name}: {title}" if title else spec.name
+            try:
+                st.session_state["ps_r"] = RX.plot_r_script(spec, df, opt)
+            except Exception:
+                st.session_state["ps_r"] = None
         except Exception as e:
             st.error(f"Could not render this plot with the data provided: {e}")
             st.caption("Tip: download the template above and match the column names/types exactly.")
@@ -135,11 +140,15 @@ if st.button("📊 Generate figure", type="primary", disabled=(df is None)):
 if st.session_state.get("ps_png") and st.session_state.get("ps_id") == spec.id:
     png = st.session_state["ps_png"]
     st.image(png, caption=spec.name, use_container_width=True)
-    d1, d2 = st.columns(2)
-    d1.download_button("⬇ Download figure (PNG)", data=png,
+    d1, d2, d3 = st.columns(3)
+    d1.download_button("⬇ Figure (PNG)", data=png,
                        file_name=f"jarvis_{spec.id}.png", mime="image/png",
                        use_container_width=True)
-    if d2.button("🤖 Interpret this figure with AI", use_container_width=True):
+    if st.session_state.get("ps_r"):
+        d2.download_button("⬇ R script (.R)", data=st.session_state["ps_r"].encode("utf-8"),
+                           file_name=f"jarvis_{spec.id}.R", mime="text/plain",
+                           use_container_width=True, help="Reproduce this exact figure in RStudio.")
+    if d3.button("🤖 Interpret with AI", use_container_width=True):
         try:
             from bibliometric_pipeline.ai import interpret_figure
             with jarvis_spinner("Interpreting…"):
