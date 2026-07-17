@@ -52,7 +52,7 @@ TOOLS = [
      "desc": "All the bibliometric tools in one place — ingest, enrich, match, merge, tag, convert & visualize.",
      "pills": ["ENRICH", "SCIENTOMETRICS", "VOSVIEWER MAPS"], "tint": "#e6f1fb", "fg": "#2563eb"},
     {"href": "Scientific_Plot_Studio", "icon": "📊", "title": "Scientific Plot Studio",
-     "desc": "~60 publication-ready plots from Excel templates — no code, no biostatistician.",
+     "desc": "~60 publication-ready plots from Excel templates — no biostatistician needed.",
      "pills": ["PICK PLOT", "FILL TEMPLATE", "UPLOAD"], "tint": "#e6f7ee", "fg": "#1d9e75"},
     {"href": "Statistics", "icon": "🧮", "title": "Statistics",
      "desc": "t-tests, ANOVA, regression, survival & more from Excel — APA output, assumption checks, "

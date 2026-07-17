@@ -26,7 +26,7 @@ sidebar_account()
 
 st.title("Statistics")
 st.caption("Pick a test → download its Excel template → upload your data → get an APA-style result with "
-           "assumption checks, effect sizes and a plain-language verdict. No coding, no biostatistician.")
+           "assumption checks, effect sizes and a plain-language verdict — no biostatistician needed.")
 
 cats = SL.by_category()
 cat_names = sorted(cats.keys(), key=lambda s: int(s.split(".")[0]))

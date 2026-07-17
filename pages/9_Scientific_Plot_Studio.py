@@ -27,7 +27,7 @@ sidebar_account()
 
 st.title("Scientific Plot Studio")
 st.caption("Pick a plot → download its Excel template → fill your data → upload → get a publication-ready "
-           "figure. No coding, no Python, no biostatistician. ~60 plot types across 7 categories.")
+           "figure — no biostatistician needed. ~60 plot types across 7 categories.")
 
 cats = PS.by_category()
 cat_names = sorted(cats.keys())
