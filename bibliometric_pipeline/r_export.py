@@ -122,7 +122,7 @@ print(t.test(Value ~ Group, data = df))          # Welch by default
 print(cohen.d(Value ~ Group, data = df))          # effect size
 """),
 "mann_whitney": (["rstatix"], """
-print(wilcox.test(Value ~ Group, data = df))
+print(wilcox.test(Value ~ Group, data = df, exact = FALSE))   # exact=FALSE avoids the 'ties' warning
 print(wilcox_effsize(df, Value ~ Group))          # rank-biserial
 """),
 "ttest_one": ([], """
@@ -144,10 +144,11 @@ print(dunnTest(Value ~ factor(Group), data = df, method = "bonferroni"))
 t.test(df$Before, df$After, paired = TRUE)
 """),
 "wilcoxon": ([], """
-wilcox.test(df$Before, df$After, paired = TRUE)
+wilcox.test(df$Before, df$After, paired = TRUE, exact = FALSE)   # exact=FALSE avoids the 'ties' warning
 """),
 "friedman": ([], """
-friedman.test(Value ~ factor(Condition) | factor(Subject), data = df)
+df$Condition <- factor(df$Condition); df$Subject <- factor(df$Subject)
+friedman.test(Value ~ Condition | Subject, data = df)
 """),
 "chi_square": (["rcompanion"], """
 tab <- table(df$CatA, df$CatB)
@@ -167,8 +168,8 @@ chisq.test(x = df$Observed, p = df$Expected / sum(df$Expected))
 """),
 "correlation": ([], """
 print(cor.test(df$X, df$Y, method = "pearson"))
-print(cor.test(df$X, df$Y, method = "spearman"))
-print(cor.test(df$X, df$Y, method = "kendall"))
+print(cor.test(df$X, df$Y, method = "spearman", exact = FALSE))  # exact=FALSE avoids the 'ties' warning
+print(cor.test(df$X, df$Y, method = "kendall", exact = FALSE))
 """),
 "corr_matrix": (["Hmisc"], """
 num <- df[sapply(df, is.numeric)]
@@ -220,8 +221,8 @@ print(b)
 print(boot.ci(b, type = "bca"))
 """),
 "permutation": (["coin"], """
-oneway_test(Value ~ factor(Group), data = df,
-            distribution = approximate(nresample = 10000))
+df$Group <- factor(df$Group)
+oneway_test(Value ~ Group, data = df, distribution = approximate(nresample = 10000))
 """),
 }
 
@@ -409,20 +410,26 @@ p <- ggplot(df, aes(X, Y)) + geom_path(color = "grey") + geom_point(size = 3, co
 """),
 # --- 4. trends ---
 "line": ([], "gg", """
-p <- ggplot(df, aes(factor(X), Y, group = { if ("Series" %in% names(df)) Series else 1 })) +
-  { if ("Series" %in% names(df)) geom_line(aes(color = Series), linewidth = 1) else geom_line(linewidth = 1, color = "#2563eb") } +
-  geom_point() + theme_minimal() + labs(title = "Line chart", x = "X")
+if ("Series" %in% names(df)) {
+  p <- ggplot(df, aes(factor(X), Y, color = Series, group = Series)) + geom_line(linewidth = 1) + geom_point()
+} else {
+  p <- ggplot(df, aes(factor(X), Y, group = 1)) + geom_line(linewidth = 1, color = "#2563eb") + geom_point()
+}
+p <- p + theme_minimal() + labs(title = "Line chart", x = "X")
 """),
 "multiline": ([], "gg", """
 p <- ggplot(df, aes(factor(X), Y, group = Series, color = Series)) + geom_line(linewidth = 1) + geom_point() +
   theme_minimal() + labs(title = "Multi-series line", x = "X")
 """),
 "area": ([], "gg", """
-p <- ggplot(df, aes(factor(X), Y, group = 1)) + geom_area(fill = "#2563eb", alpha = .4) +
-  geom_line(color = "#2563eb") + theme_minimal() + labs(title = "Area chart", x = "X")
+df$xpos <- as.numeric(factor(df$X, levels = unique(df$X)))
+p <- ggplot(df, aes(xpos, Y)) + geom_area(fill = "#2563eb", alpha = .4) + geom_line(color = "#2563eb") +
+  scale_x_continuous(breaks = df$xpos, labels = df$X) + theme_minimal() + labs(title = "Area chart", x = "X")
 """),
 "stacked_area": ([], "gg", """
-p <- ggplot(df, aes(factor(X), Value, fill = Series, group = Series)) + geom_area(alpha = .85) +
+df$xpos <- as.numeric(factor(df$X, levels = unique(df$X)))
+p <- ggplot(df, aes(xpos, Value, fill = Series)) + geom_area(alpha = .85) +
+  scale_x_continuous(breaks = unique(df$xpos), labels = unique(df$X)) +
   theme_minimal() + labs(title = "Stacked area", x = "X")
 """),
 "step": ([], "gg", """
@@ -577,14 +584,14 @@ p <- ggplot(df, aes(reorder(Subject, -PctChange), PctChange, fill = PctChange < 
 """),
 # --- 7. study-flow ---
 "prisma": (["DiagrammeR"], "self", """
-nodes <- paste0("n", seq_len(nrow(df)), " [label='", df$Stage, " (n=", df$Count, ")', shape=box, style=rounded]")
-edges <- if (nrow(df) > 1) paste0("n", seq_len(nrow(df) - 1), " -> n", 2:nrow(df), collapse="; ") else ""
-grViz(paste0("digraph{ rankdir=TB; ", paste(nodes, collapse="; "), "; ", edges, " }"))
+nodes <- paste0('n', seq_len(nrow(df)), ' [label="', df$Stage, ' (n=', df$Count, ')", shape=box, style=rounded]')
+edges <- if (nrow(df) > 1) paste0('n', seq_len(nrow(df) - 1), ' -> n', 2:nrow(df), collapse = '; ') else ''
+grViz(paste0('digraph { rankdir=TB; ', paste(nodes, collapse = '; '), '; ', edges, ' }'))
 """),
 "consort": (["DiagrammeR"], "self", """
-nodes <- paste0("n", seq_len(nrow(df)), " [label='", df$Stage, " (n=", df$Count, ")', shape=box, style=rounded]")
-edges <- if (nrow(df) > 1) paste0("n", seq_len(nrow(df) - 1), " -> n", 2:nrow(df), collapse="; ") else ""
-grViz(paste0("digraph{ rankdir=TB; ", paste(nodes, collapse="; "), "; ", edges, " }"))
+nodes <- paste0('n', seq_len(nrow(df)), ' [label="', df$Stage, ' (n=', df$Count, ')", shape=box, style=rounded]')
+edges <- if (nrow(df) > 1) paste0('n', seq_len(nrow(df) - 1), ' -> n', 2:nrow(df), collapse = '; ') else ''
+grViz(paste0('digraph { rankdir=TB; ', paste(nodes, collapse = '; '), '; ', edges, ' }'))
 """),
 "rob_traffic": ([], "gg", """
 low <- grepl("low", tolower(df$Judgement)); high <- grepl("high", tolower(df$Judgement))
