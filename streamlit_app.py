@@ -58,6 +58,9 @@ TOOLS = [
      "desc": "t-tests, ANOVA, regression, survival & more from Excel — APA output, assumption checks, "
              "test-chooser wizard.",
      "pills": ["PICK TEST", "FILL TEMPLATE", "APA RESULT"], "tint": "#efe9fb", "fg": "#7d3c98"},
+    {"href": "Meta_Analysis", "icon": "🔬", "title": "Meta-Analysis",
+     "desc": "Pool studies (OR/RR/MD/HR & more) → forest & funnel plots, heterogeneity, bias & sensitivity.",
+     "pills": ["UPLOAD STUDIES", "FOREST + FUNNEL", "METAFOR R"], "tint": "#fdeede", "fg": "#d8572a"},
     {"href": "AI_Figure_Interpreter", "icon": "🤖", "title": "AI Figure Interpreter",
      "desc": "Upload any figure or map → a plain-language interpretation for your paper.",
      "pills": ["UPLOAD PNG / JPG"], "tint": "#fdeede", "fg": "#d8572a"},
