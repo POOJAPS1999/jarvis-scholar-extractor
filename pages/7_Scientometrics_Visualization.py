@@ -133,7 +133,7 @@ download_buttons(overview, stem="dataset_overview", key_prefix="ov", sheet_name=
 
 # --- Missing data ---
 st.header("2 · Missing data")
-st.dataframe(missing, use_container_width=True, hide_index=True)
+st.dataframe(missing, width="stretch", hide_index=True)
 download_buttons(missing, stem="missing_data", key_prefix="md", sheet_name="Missing")
 
 # --- Annual production & citations ---
@@ -146,7 +146,7 @@ with cc1:
             charts.vbar(annual_prod["Year"].tolist(), annual_prod["Documents"].tolist(),
                         title="Annual scientific production", ylabel="Documents"),
             "annual_production", "annprod")
-    st.dataframe(annual_prod, use_container_width=True, hide_index=True)
+    st.dataframe(annual_prod, width="stretch", hide_index=True)
 with cc2:
     st.subheader("Total citations per year")
     if not annual_cit.empty:
@@ -154,7 +154,7 @@ with cc2:
             charts.line(annual_cit["Year"].tolist(), annual_cit["Total Citations"].tolist(),
                         title="Annual total citations", ylabel="Citations"),
             "annual_citations", "anncit")
-    st.dataframe(annual_cit, use_container_width=True, hide_index=True)
+    st.dataframe(annual_cit, width="stretch", hide_index=True)
 
 # --- Bradford's law ---
 st.header("4 · Bradford's law of scattering")
@@ -164,7 +164,7 @@ if not bradford.empty:
     zc1, zc2 = st.columns([1, 2])
     with zc1:
         st.caption("Zone 1 = the core journals carrying ~1/3 of all documents.")
-        st.dataframe(zone_sum, use_container_width=True, hide_index=True)
+        st.dataframe(zone_sum, width="stretch", hide_index=True)
     with zc2:
         charts.render_chart(
             charts.bradford_curve(bradford["Rank"].tolist(), bradford["Cumulative"].tolist(),
@@ -179,7 +179,7 @@ if not sources.empty:
         charts.hbar(sources["Source"].tolist(), sources["Documents"].tolist(),
                     title="Most relevant sources", xlabel="Documents"),
         "most_relevant_sources", "src")
-    st.dataframe(sources, use_container_width=True, hide_index=True)
+    st.dataframe(sources, width="stretch", hide_index=True)
     download_buttons(sources, stem="most_relevant_sources", key_prefix="src", sheet_name="Sources")
 
 # --- Sources local impact by h-index ---
@@ -189,20 +189,20 @@ if not hindex.empty:
         charts.hbar(hindex["Source"].tolist(), hindex["h-index"].tolist(),
                     title="Sources by local h-index", xlabel="h-index"),
         "sources_h_index", "hx")
-    st.dataframe(hindex, use_container_width=True, hide_index=True)
+    st.dataframe(hindex, width="stretch", hide_index=True)
     download_buttons(hindex, stem="sources_h_index", key_prefix="hx", sheet_name="h-index")
 
 # --- Top-cited records ---
 st.header("7 · Top-cited individual records")
 if not topcited.empty:
-    st.dataframe(topcited, use_container_width=True, hide_index=True)
+    st.dataframe(topcited, width="stretch", hide_index=True)
     download_buttons(topcited, stem="top_cited_records", key_prefix="tc", sheet_name="Top cited")
 
 # --- Most locally-cited references ---
 st.header("8 · Most locally-cited references")
 st.caption("How often each reference is cited by documents *within this dataset*.")
 if not localcited.empty:
-    st.dataframe(localcited, use_container_width=True, hide_index=True)
+    st.dataframe(localcited, width="stretch", hide_index=True)
     download_buttons(localcited, stem="local_cited_references", key_prefix="lc", sheet_name="Local cited")
 
 # --- Network maps (Phase 2) ---
@@ -257,7 +257,7 @@ if st.button("Generate map", type="primary", key="genmap"):
                    nv.network_figure(items, edges, extra, title=map_choice, top_n=top_n, weight_name=weight_name))
         _l.empty()
         st.caption(f"{len(items):,} total nodes · {len(edges):,} links · showing top {top_n} by weight.")
-        st.plotly_chart(fig, use_container_width=True,
+        st.plotly_chart(fig, width="stretch",
                         config={"displaylogo": False,
                                 "toImageButtonOptions": {"format": "png", "filename": "jarvis_network",
                                                          "scale": 2}})
@@ -319,7 +319,7 @@ if themes is None or themes.empty:
             "keyword-occurrence threshold). Works well on full datasets.", icon="ℹ️")
 else:
     charts.render_chart(charts.thematic_map(themes), "strategic_thematic_map", "themap")
-    st.dataframe(themes, use_container_width=True, hide_index=True)
+    st.dataframe(themes, width="stretch", hide_index=True)
     download_buttons(themes, stem="strategic_thematic_map", key_prefix="tm", sheet_name="Themes")
 
 # --- Grants / funding (Phase 3) ---
@@ -331,7 +331,7 @@ else:
         charts.hbar(funders["Funder"].tolist(), funders["Papers"].tolist(),
                     title="Leading funders", xlabel="Papers"),
         "top_funders", "fund")
-    st.dataframe(funders, use_container_width=True, hide_index=True)
+    st.dataframe(funders, width="stretch", hide_index=True)
     download_buttons(funders, stem="top_funders", key_prefix="fn", sheet_name="Funders")
 
 # --- ICMR institute analysis (ICMR mode only) ---
@@ -349,31 +349,31 @@ if icmr_mode and it.has_required(df):
     _li.empty()
 
     st.markdown("**Table 3 · Institute-level bibliometric benchmarking** (top 15 by volume)")
-    st.dataframe(t3, use_container_width=True, hide_index=True)
+    st.dataframe(t3, width="stretch", hide_index=True)
     download_buttons(t3, stem="icmr_T3_benchmarking", key_prefix="it3", sheet_name="Table 3")
 
     st.markdown("**Table 4 · Publications by inferred ICMR HQ scientific division**")
-    st.dataframe(t4_summary, use_container_width=True, hide_index=True)
+    st.dataframe(t4_summary, width="stretch", hide_index=True)
     download_buttons(t4_summary, stem="icmr_T4_divisions", key_prefix="it4", sheet_name="Table 4")
 
     st.markdown("**Table 5 · Leadership vs. contribution, by institute**")
     if not t5.empty:
         st.caption("Corpus-wide: " + ", ".join(f"{k} — {v}" for k, v in t5_overall.items()))
-        st.dataframe(t5, use_container_width=True, hide_index=True)
+        st.dataframe(t5, width="stretch", hide_index=True)
         download_buttons(t5, stem="icmr_T5_leadership", key_prefix="it5", sheet_name="Table 5")
     else:
         st.caption("Needs ‘Corresponding Author from ICMR’ and ‘Any Author from ICMR’ columns.")
 
     st.markdown("**Table 8 · Mandate fidelity, by institute** (top 15 by fidelity %)")
     if not t8.empty:
-        st.dataframe(t8, use_container_width=True, hide_index=True)
+        st.dataframe(t8, width="stretch", hide_index=True)
         download_buttons(t8, stem="icmr_T8_mandate", key_prefix="it8", sheet_name="Table 8")
     else:
         st.caption("No institute-vision matches found for this dataset.")
 
     st.markdown("**Table 10 · Leading international partner countries, by disease-focus institute**")
     if not t10.empty:
-        st.dataframe(t10, use_container_width=True, hide_index=True)
+        st.dataframe(t10, width="stretch", hide_index=True)
         download_buttons(t10, stem="icmr_T10_partners", key_prefix="it10", sheet_name="Table 10")
     else:
         st.caption("Needs an ‘All Country’ column.")

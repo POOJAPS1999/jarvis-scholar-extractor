@@ -152,11 +152,11 @@ if st.button("Tag ICMR institutes", type="primary"):
     if is_real.any():
         st.subheader("Breakdown by institute")
         counts = exploded[is_real].value_counts().rename_axis("Institute").reset_index(name="Rows")
-        st.dataframe(counts, use_container_width=True, hide_index=True)
+        st.dataframe(counts, width="stretch", hide_index=True)
 
     st.subheader("Preview (tagged column last)")
     preview_cols = aff_cols[:1] + [_TAG_COL]
-    st.dataframe(out[preview_cols].head(50), use_container_width=True, hide_index=True)
+    st.dataframe(out[preview_cols].head(50), width="stretch", hide_index=True)
 
     stem = os.path.splitext(uploaded.name)[0] + "_icmr_tagged"
     download_buttons(out, stem=stem, key_prefix="icmr", sheet_name="ICMR Tagged")
@@ -185,11 +185,11 @@ if st.button("Tag ICMR institutes", type="primary"):
         _l.empty()
 
         st.markdown("**Table 3 · Institute-level bibliometric benchmarking** (top 15 by volume)")
-        st.dataframe(t3, use_container_width=True, hide_index=True)
+        st.dataframe(t3, width="stretch", hide_index=True)
         download_buttons(t3, stem=stem + "_T3_benchmarking", key_prefix="t3", sheet_name="Table 3")
 
         st.markdown("**Table 4 · Publications by inferred ICMR HQ scientific division**")
-        st.dataframe(t4_summary, use_container_width=True, hide_index=True)
+        st.dataframe(t4_summary, width="stretch", hide_index=True)
         download_buttons(t4_summary, stem=stem + "_T4_divisions", key_prefix="t4", sheet_name="Table 4")
 
         st.markdown("**Table 5 · Leadership vs. contribution, by institute** (top 15 by volume)")
@@ -197,21 +197,21 @@ if st.button("Tag ICMR institutes", type="primary"):
             st.caption("Needs ‘Corresponding Author from ICMR’ and ‘Any Author from ICMR’ columns.")
         else:
             st.caption(f"Corpus-wide: " + ", ".join(f"{k} — {v}" for k, v in t5_overall.items()))
-            st.dataframe(t5, use_container_width=True, hide_index=True)
+            st.dataframe(t5, width="stretch", hide_index=True)
             download_buttons(t5, stem=stem + "_T5_leadership", key_prefix="t5", sheet_name="Table 5")
 
         st.markdown("**Table 8 · Mandate fidelity, by institute** (top 15 by fidelity %)")
         if t8.empty:
             st.caption("No institute-vision matches found for this dataset.")
         else:
-            st.dataframe(t8, use_container_width=True, hide_index=True)
+            st.dataframe(t8, width="stretch", hide_index=True)
             download_buttons(t8, stem=stem + "_T8_mandate", key_prefix="t8", sheet_name="Table 8")
 
         st.markdown("**Table 10 · Leading international partner countries, by disease-focus institute**")
         if t10.empty:
             st.caption("Needs an ‘All Country’ column to compute partner countries.")
         else:
-            st.dataframe(t10, use_container_width=True, hide_index=True)
+            st.dataframe(t10, width="stretch", hide_index=True)
             download_buttons(t10, stem=stem + "_T10_partners", key_prefix="t10", sheet_name="Table 10")
 
     brand_footer()

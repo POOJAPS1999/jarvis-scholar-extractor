@@ -111,7 +111,7 @@ if n_missing_title:
     )
 
 st.subheader("Preview")
-st.dataframe(df.head(50), use_container_width=True, hide_index=True)
+st.dataframe(df.head(50), width="stretch", hide_index=True)
 
 stem = os.path.splitext(uploaded.name)[0] + "_converted"
 download_buttons(df, stem=stem, key_prefix="convert", sheet_name="Converted")

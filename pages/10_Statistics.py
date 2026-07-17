@@ -165,11 +165,11 @@ if spec.needs_data:
                             "Required": ["Required" if c.required else "Optional" for c in spec.columns],
                             "What to enter": [c.help for c in spec.columns]})
     tcol, dcol = st.columns([3, 1])
-    tcol.dataframe(cols_df, hide_index=True, use_container_width=True)
+    tcol.dataframe(cols_df, hide_index=True, width="stretch")
     dcol.download_button("⬇ Download Excel template", data=SL.template_bytes(spec),
                          file_name=f"jarvis_stat_{spec.id}_template.xlsx",
                          mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                         use_container_width=True)
+                         width="stretch")
     dcol.caption("Fill the **Data** sheet, then upload it below.")
 
     st.markdown("#### Your data")
@@ -193,7 +193,7 @@ if spec.needs_data:
             st.error(f"Could not read the file: {e}")
     if df is not None:
         with st.expander("Preview data", expanded=False):
-            st.dataframe(df.head(20), use_container_width=True)
+            st.dataframe(df.head(20), width="stretch")
 
 # extra numeric parameters (e.g. one-sample μ0, power inputs)
 if spec.params:
@@ -231,7 +231,7 @@ if res is not None and st.session_state.get("sl_id") == spec.id:
     st.markdown("### Result")
     st.success(res.headline)
     if not res.table.empty:
-        st.dataframe(res.table, hide_index=True, use_container_width=True)
+        st.dataframe(res.table, hide_index=True, width="stretch")
     if res.interpretation:
         st.markdown(f"**Interpretation.** {res.interpretation}")
     for a in res.assumptions:
@@ -239,19 +239,19 @@ if res is not None and st.session_state.get("sl_id") == spec.id:
     for c in res.caveats:
         st.warning("Caveat — " + c)
     if res.figure_png:
-        st.image(res.figure_png, use_container_width=True)
+        st.image(res.figure_png, width="stretch")
 
     d1, d2, d3 = st.columns(3)
     d1.download_button("⬇ Report (.txt)", data=res.report_text(spec.name).encode("utf-8"),
                        file_name=f"jarvis_{spec.id}_report.txt", mime="text/plain",
-                       use_container_width=True)
+                       width="stretch")
     if st.session_state.get("sl_r"):
         d2.download_button("⬇ R script (.R)", data=st.session_state["sl_r"].encode("utf-8"),
                            file_name=f"jarvis_{spec.id}.R", mime="text/plain",
-                           use_container_width=True, help="Reproduce this exact result in RStudio.")
+                           width="stretch", help="Reproduce this exact result in RStudio.")
     if res.figure_png:
         d3.download_button("⬇ Figure (PNG)", data=res.figure_png,
-                           file_name=f"jarvis_{spec.id}.png", mime="image/png", use_container_width=True)
+                           file_name=f"jarvis_{spec.id}.png", mime="image/png", width="stretch")
     if st.button("🤖 Explain this result in plain English (AI)"):
         try:
             from bibliometric_pipeline.ai import interpret_figure

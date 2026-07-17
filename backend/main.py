@@ -217,6 +217,27 @@ def _gemini_pick_model(key):
     return (flash or names or [None])[0]
 
 
+class GeminiRateLimited(Exception):
+    """Raised when Gemini returns 429 (free-tier quota / rate limit)."""
+    def __init__(self, retry_after=None, detail=""):
+        self.retry_after = retry_after
+        self.detail = detail
+        super().__init__(detail)
+
+
+def _parse_retry_delay(resp):
+    """Pull Google's suggested wait (seconds) out of a 429 body, if present."""
+    try:
+        for d in resp.json().get("error", {}).get("details", []):
+            if str(d.get("@type", "")).endswith("RetryInfo"):
+                rd = str(d.get("retryDelay", ""))
+                if rd.endswith("s"):
+                    return int(float(rd[:-1]))
+    except Exception:
+        pass
+    return None
+
+
 def _gemini_vision(key, media, b64, prompt):
     """Google Gemini — has a free tier (Google AI Studio key)."""
     body = {"contents": [{"parts": [
@@ -234,6 +255,8 @@ def _gemini_vision(key, media, b64, prompt):
         if discovered:
             model = discovered
             r = _call(model)
+    if r.status_code == 429:  # free-tier quota / rate limit
+        raise GeminiRateLimited(_parse_retry_delay(r), r.text[:200])
     if not r.ok:
         raise HTTPException(502, f"Gemini error {r.status_code}: {r.text[:300]}")
     data = r.json()
@@ -268,7 +291,20 @@ async def interpret_figure(file: UploadFile = File(...), context: str = Form("")
     prompt = _FIGURE_PROMPT.format(context=ctx)
     try:
         if gemini_key:          # prefer the free provider if configured
-            text, model = _gemini_vision(gemini_key, media, b64, prompt)
+            try:
+                text, model = _gemini_vision(gemini_key, media, b64, prompt)
+            except GeminiRateLimited as rl:
+                if anthropic_key:   # seamless fallback to the paid provider
+                    text, model = _anthropic_vision(anthropic_key, media, b64, prompt)
+                else:
+                    wait = f" Try again in about {rl.retry_after} seconds." if rl.retry_after else \
+                           " Your per-minute or daily free quota is used up (the daily quota resets " \
+                           "at midnight US-Pacific)."
+                    raise HTTPException(
+                        429,
+                        "Gemini's free-tier quota is exhausted." + wait +
+                        " Options: wait and retry, enable billing on your Gemini API key for higher "
+                        "limits, or set an ANTHROPIC_API_KEY on the server for an automatic fallback.")
         else:
             text, model = _anthropic_vision(anthropic_key, media, b64, prompt)
     except HTTPException:

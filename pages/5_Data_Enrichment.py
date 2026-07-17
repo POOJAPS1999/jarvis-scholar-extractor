@@ -319,7 +319,7 @@ if uploaded is not None:
                 data=output_bytes,
                 file_name=f"bibliometric_output_{job_id}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
+                width="stretch",
             )
             # Scopus-format CSV, generated inline from the enriched output (no
             # extra click, no page reset) — same converter as the standalone tool.
@@ -331,7 +331,7 @@ if uploaded is not None:
                     data=scopus_bytes,
                     file_name=f"scopus_format_{job_id}.csv",
                     mime="text/csv",
-                    use_container_width=True,
+                    width="stretch",
                 )
             except Exception as e:
                 dcol2.caption(f"Scopus CSV unavailable: {e}")

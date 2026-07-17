@@ -503,7 +503,7 @@ def how_to_use(steps: list, preview_image: bytes = None, preview_caption: str = 
     st.markdown("### How to use this tool")
     if preview_image is not None:
         st.image(preview_image, caption=preview_caption or "What your input file should look like",
-                 use_container_width=True)
+                 width="stretch")
     rows = []
     for i, (icon, title, desc) in enumerate(steps, start=1):
         rows.append(f"""

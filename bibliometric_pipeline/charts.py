@@ -195,7 +195,7 @@ def fig_to_png(fig: plt.Figure, dpi: int = 200) -> bytes:
 def render_chart(fig, filename: str, key: str):
     """Streamlit: show the figure + a 'Download PNG' button, then free it."""
     import streamlit as st
-    st.pyplot(fig, use_container_width=True)
+    st.pyplot(fig, width="stretch")
     st.download_button("⬇ Download PNG", data=fig_to_png(fig),
                        file_name=f"{filename}.png", mime="image/png", key=f"png_{key}")
     plt.close(fig)

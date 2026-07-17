@@ -34,7 +34,7 @@ def download_buttons(df: pd.DataFrame, stem: str, key_prefix: str, sheet_name: s
         file_name=f"{stem}.csv",
         mime="text/csv",
         key=f"{key_prefix}_csv",
-        use_container_width=True,
+        width="stretch",
     )
     c2.download_button(
         "Download Excel",
@@ -42,7 +42,7 @@ def download_buttons(df: pd.DataFrame, stem: str, key_prefix: str, sheet_name: s
         file_name=f"{stem}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         key=f"{key_prefix}_xlsx",
-        use_container_width=True,
+        width="stretch",
     )
 
 

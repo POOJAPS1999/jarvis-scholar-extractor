@@ -151,7 +151,7 @@ if st.button("Convert to Scopus format", type="primary"):
         )
 
     st.subheader("Preview")
-    st.dataframe(out_df.head(30), use_container_width=True, hide_index=True)
+    st.dataframe(out_df.head(30), width="stretch", hide_index=True)
 
     stem = os.path.splitext(uploaded.name)[0] + "_scopus_format"
     st.download_button(

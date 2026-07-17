@@ -35,7 +35,7 @@ context = st.text_input(
 )
 
 if uploaded is not None:
-    st.image(uploaded, caption="Figure to interpret", use_container_width=True)
+    st.image(uploaded, caption="Figure to interpret", width="stretch")
     if st.button("🔍 Interpret with AI", type="primary"):
         _loader = st.empty()
         _loader.markdown(reactor_loader_html("JARVIS is reading the figure…"), unsafe_allow_html=True)

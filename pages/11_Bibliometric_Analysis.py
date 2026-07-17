@@ -74,7 +74,7 @@ c2.download_button(
     data=enrichment_template_bytes(),
     file_name="jarvis_scholar_enrichment_template.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    use_container_width=True,
+    width="stretch",
 )
 st.markdown('<div class="js-footnote">🛡 Your data stays private and secure · Jarvis Scholar · research preview</div>',
             unsafe_allow_html=True)

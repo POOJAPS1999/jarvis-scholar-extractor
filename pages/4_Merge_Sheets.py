@@ -123,7 +123,7 @@ if st.button("Merge", type="primary"):
         )
 
     st.subheader("Preview")
-    st.dataframe(merged.head(50), use_container_width=True, hide_index=True)
+    st.dataframe(merged.head(50), width="stretch", hide_index=True)
     download_buttons(merged, stem="merged_sheets", key_prefix="merge", sheet_name="Merged")
     brand_footer(note=f"{summary['rows_out']:,} rows merged")
 

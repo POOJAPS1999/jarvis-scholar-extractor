@@ -52,13 +52,13 @@ cols_df = pd.DataFrame(
      "What to enter": [c.help for c in spec.columns]}
 )
 tcol, dcol = st.columns([3, 1])
-tcol.dataframe(cols_df, hide_index=True, use_container_width=True)
+tcol.dataframe(cols_df, hide_index=True, width="stretch")
 dcol.download_button(
     "⬇ Download Excel template",
     data=PS.template_bytes(spec),
     file_name=f"jarvis_plot_{spec.id}_template.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    use_container_width=True,
+    width="stretch",
 )
 dcol.caption("Fill the **Data** sheet, then upload it below.")
 
@@ -89,7 +89,7 @@ elif up is not None:
 
 if df is not None:
     with st.expander("Preview data", expanded=False):
-        st.dataframe(df.head(20), use_container_width=True)
+        st.dataframe(df.head(20), width="stretch")
 
 # ---- style controls ------------------------------------------------------
 with st.expander("Style & labels", expanded=True):
@@ -139,16 +139,16 @@ if st.button("📊 Generate figure", type="primary", disabled=(df is None)):
 # ---- show result + downloads + AI caption --------------------------------
 if st.session_state.get("ps_png") and st.session_state.get("ps_id") == spec.id:
     png = st.session_state["ps_png"]
-    st.image(png, caption=spec.name, use_container_width=True)
+    st.image(png, caption=spec.name, width="stretch")
     d1, d2, d3 = st.columns(3)
     d1.download_button("⬇ Figure (PNG)", data=png,
                        file_name=f"jarvis_{spec.id}.png", mime="image/png",
-                       use_container_width=True)
+                       width="stretch")
     if st.session_state.get("ps_r"):
         d2.download_button("⬇ R script (.R)", data=st.session_state["ps_r"].encode("utf-8"),
                            file_name=f"jarvis_{spec.id}.R", mime="text/plain",
-                           use_container_width=True, help="Reproduce this exact figure in RStudio.")
-    if d3.button("🤖 Interpret with AI", use_container_width=True):
+                           width="stretch", help="Reproduce this exact figure in RStudio.")
+    if d3.button("🤖 Interpret with AI", width="stretch"):
         try:
             from bibliometric_pipeline.ai import interpret_figure
             with jarvis_spinner("Interpreting…"):

@@ -111,7 +111,7 @@ def _auth_screen():
             with st.form("login_form"):
                 email = st.text_input("Email", placeholder="you@institution.edu")
                 pw = st.text_input("Password", type="password")
-                submitted = st.form_submit_button("Log in", type="primary", use_container_width=True)
+                submitted = st.form_submit_button("Log in", type="primary", width="stretch")
             if submitted:
                 if not email or not pw:
                     st.error("Enter your email and password.")
@@ -138,7 +138,7 @@ def _auth_screen():
                 pw2 = st.text_input("Confirm password", type="password", key="su_pw2")
                 agree = st.checkbox("I agree my details may be stored for access and updates.")
                 submitted_s = st.form_submit_button("Create account & enter", type="primary",
-                                                    use_container_width=True)
+                                                    width="stretch")
             if submitted_s:
                 if not (first and last and institution and designation and email_s and pw1):
                     st.error("Please fill in every field.")
@@ -200,6 +200,6 @@ def sidebar_account():
             f"<div style='color:#4a627a;font-size:.8rem;'>{u.get('email','')}</div></div>",
             unsafe_allow_html=True,
         )
-        if st.button("Log out", use_container_width=True, key="js_logout"):
+        if st.button("Log out", width="stretch", key="js_logout"):
             logout()
             st.rerun()

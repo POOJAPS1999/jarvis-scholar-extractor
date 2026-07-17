@@ -102,7 +102,7 @@ if mode == "Compare two lists":
         m[0].metric("List A titles", len(df_a))
         m[1].metric("Matched", n_matched)
         m[2].metric("Unmatched", len(result) - n_matched)
-        st.dataframe(result, use_container_width=True, hide_index=True)
+        st.dataframe(result, width="stretch", hide_index=True)
         download_buttons(result, stem="fuzzy_cross_match", key_prefix="xmatch", sheet_name="Matches")
 
 else:  # self-dedup
@@ -130,7 +130,7 @@ else:  # self-dedup
         else:
             n_titles = df[col].astype(str).str.strip().ne("").sum()
             st.success(f"Found {len(result)} near-duplicate pair(s) among {n_titles} titles.")
-            st.dataframe(result, use_container_width=True, hide_index=True)
+            st.dataframe(result, width="stretch", hide_index=True)
             download_buttons(result, stem="fuzzy_duplicates", key_prefix="dedup", sheet_name="Duplicates")
 
 brand_footer()
