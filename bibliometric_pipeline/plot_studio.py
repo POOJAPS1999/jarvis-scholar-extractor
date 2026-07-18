@@ -1523,43 +1523,102 @@ register(PlotSpec("consort", "CONSORT flow", "7. Study-flow diagrams",
     lambda df, opt: _flow_diagram(df, opt, accent="#1d9e75")))
 
 
+_ROB_GREEN, _ROB_YELLOW, _ROB_RED, _ROB_GREY = "#4cae4f", "#f5c518", "#e63329", "#d7dee6"
+
+def _rob_colour(v):
+    if v is None:
+        return _ROB_GREY
+    vl = str(v).strip().lower()
+    if vl in ("", "nan", "none", "na"):
+        return _ROB_GREY
+    if "low" in vl:
+        return _ROB_GREEN
+    if "high" in vl or "serious" in vl or "critical" in vl:
+        return _ROB_RED
+    return _ROB_YELLOW           # some concerns / unclear / moderate / unknown
+
+
 def r_rob(df, opt):
-    study = _col(df, "Study").astype(str); domain = _col(df, "Domain").astype(str)
+    """Publication-ready risk-of-bias traffic-light plot (robvis / QUADAS-2 style):
+    bordered cells, vertical domain headers, colour-coded circles and a legend.
+    An optional 'Panel' column splits domains into side-by-side panels
+    (e.g. QUADAS-2 'Risk of bias' + 'Applicability concerns')."""
+    import matplotlib.patches as mpatches
+    study = _col(df, "Study").astype(str)
+    domain = _col(df, "Domain").astype(str)
     judge = _col(df, "Judgement").astype(str)
-    d = pd.DataFrame({"s": study, "d": domain, "j": judge})
-    studies = list(pd.unique(d["s"])); domains = list(pd.unique(d["d"]))
-    piv = d.pivot_table(index="s", columns="d", values="j", aggfunc="first").reindex(index=studies, columns=domains)
-    fig, ax = new_fig(opt)
-    cmap = {"low": ("#1d9e75", "+"), "high": ("#d8572a", "−"),
-            "some": ("#e0a100", "?"), "moderate": ("#e0a100", "?"),
-            "concern": ("#e0a100", "?"), "unclear": ("#9fb0c4", "?"), "no": ("#9fb0c4", "?")}
-    def look(v):
-        vl = str(v).lower()
-        for k, cs in cmap.items():
-            if k in vl:
-                return cs
-        return ("#c3d0dd", "")
+    pcol = _col(df, "Panel")
+    panel = pcol.astype(str) if pcol is not None else pd.Series(["Risk of bias"] * len(study))
+    d = pd.DataFrame({"s": study.values, "d": domain.values, "j": judge.values, "p": panel.values})
+    studies = list(dict.fromkeys(d["s"]))
+    panels = list(dict.fromkeys(d["p"]))
+    pan_domains = {p: list(dict.fromkeys(d[d.p == p]["d"])) for p in panels}
+    lut = {(r.s, r.p, r.d): r.j for r in d.itertuples()}
+    n = len(studies)
+
+    GAP = 1.6
+    xpos, spans, x = {}, {}, 0.0
+    for p in panels:
+        start = x
+        for dm in pan_domains[p]:
+            xpos[(p, dm)] = x; x += 1
+        spans[p] = (start, x - 1); x += GAP
+    total_w = x - GAP
+
+    maxlab = max((len(s) for s in studies), default=6)
+    left = -(0.9 + 0.135 * maxlab)
+    right = total_w + 3.8
+    top = n - 0.5 + 5.6
+    xspan, yspan = right - left, top - (-0.9)
+    fig, ax = plt.subplots(figsize=(min(22, 0.46 * xspan + 2), min(24, 0.46 * yspan + 1)), dpi=opt.dpi)
+    R = 0.40
+
+    for p in panels:
+        for dm in pan_domains[p]:
+            xj = xpos[(p, dm)]
+            for i, s in enumerate(studies):
+                y = n - 1 - i
+                ax.add_patch(mpatches.Rectangle((xj - 0.5, y - 0.5), 1, 1, fill=False,
+                                                edgecolor="black", lw=1.0, zorder=2))
+                ax.add_patch(plt.Circle((xj, y), R, facecolor=_rob_colour(lut.get((s, p, dm))),
+                                        edgecolor="black", lw=0.7, zorder=3))
+            ax.text(xpos[(p, dm)], n - 0.5 + 0.28, dm, rotation=90, ha="center", va="bottom",
+                    fontsize=11, color="#222")
+        a, b = spans[p]
+        ax.add_patch(mpatches.Rectangle((a - 0.5, -0.5), (b - a) + 1, n, fill=False,
+                                        edgecolor="black", lw=1.8, zorder=4))
+        ax.text((a + b) / 2, n - 0.5 + 4.9, p, ha="center", va="bottom",
+                fontsize=13.5, color="#12283b")
+
     for i, s in enumerate(studies):
-        for j, dm in enumerate(domains):
-            color, sym = look(piv.loc[s, dm])
-            ax.add_patch(plt.Circle((j, len(studies) - 1 - i), 0.38, color=color, zorder=3))
-            ax.text(j, len(studies) - 1 - i, sym, ha="center", va="center",
-                    color="white", fontsize=12, fontweight="bold", zorder=4)
-    ax.set_xticks(range(len(domains))); ax.set_xticklabels(domains, rotation=25, ha="right")
-    ax.set_yticks(range(len(studies))); ax.set_yticklabels(list(reversed(studies)))
-    ax.set_xlim(-0.6, len(domains) - 0.4); ax.set_ylim(-0.6, len(studies) - 0.4)
-    ax.set_aspect("equal"); ax.grid(False)
-    for side in ("top", "right", "left", "bottom"):
-        ax.spines[side].set_visible(False)
+        ax.text(-0.72, n - 1 - i, s, ha="right", va="center", fontsize=11, color="#222")
+
+    # legend (right)
+    lx = total_w + 1.1
+    ly = n - 1.2
+    for lab, c in [("Low", _ROB_GREEN), ("Unclear", _ROB_YELLOW), ("High", _ROB_RED)]:
+        ax.add_patch(plt.Circle((lx, ly), R, facecolor=c, edgecolor="black", lw=0.7, zorder=3))
+        ax.text(lx + 0.65, ly, lab, ha="left", va="center", fontsize=11.5, color="#222")
+        ly -= 1.25
+
+    ax.set_xlim(left, right); ax.set_ylim(-0.9, top)
+    ax.set_aspect("equal"); ax.axis("off")
     return bare_finish(fig, opt, ax)
 
 register(PlotSpec("rob_traffic", "Risk-of-bias traffic light", "7. Study-flow diagrams",
-    "Quality-assessment grid (Low / Some concerns / High per domain).",
+    "robvis / QUADAS-2 style quality-assessment grid (Low / Unclear / High per domain). "
+    "Add an optional 'Panel' column to split into side-by-side panels (e.g. QUADAS-2 "
+    "'Risk of bias' + 'Applicability concerns').",
     [Column("Study","text",True,"Study name"), Column("Domain","text",True,"Bias domain"),
-     Column("Judgement","text",True,"Low / Some concerns / High")],
-    {"Study": ["Study 1","Study 1","Study 2","Study 2","Study 3","Study 3"],
-     "Domain": ["Selection","Blinding"]*3,
-     "Judgement": ["Low","High","Some concerns","Low","High","Low"]},
+     Column("Judgement","text",True,"Low / Unclear (Some concerns) / High"),
+     Column("Panel","text",False,"Optional panel, e.g. 'Risk of bias' or 'Applicability concerns'")],
+    {"Study": (["Combaret 2002"]*7 + ["Chicard 2018"]*7 + ["Yagyu 2016"]*7),
+     "Panel": (["Risk of bias"]*4 + ["Applicability concerns"]*3)*3,
+     "Domain": (["Patient selection","Index test","Reference standard","Flow and timing",
+                 "Patient selection","Index test","Reference standard"])*3,
+     "Judgement": ["High","Unclear","Low","Low","High","Low","Low",
+                   "High","Unclear","Unclear","High","Low","Low","Low",
+                   "Unclear","Low","Low","Low","Low","Low","Low"]},
     r_rob))
 
 
