@@ -594,11 +594,26 @@ edges <- if (nrow(df) > 1) paste0('n', seq_len(nrow(df) - 1), ' -> n', 2:nrow(df
 grViz(paste0('digraph { rankdir=TB; ', paste(nodes, collapse = '; '), '; ', edges, ' }'))
 """),
 "rob_traffic": ([], "gg", """
-low <- grepl("low", tolower(df$Judgement)); high <- grepl("high", tolower(df$Judgement))
-df$Level <- ifelse(low, "Low", ifelse(high, "High", "Some concerns"))
-p <- ggplot(df, aes(Domain, Study, color = Level)) + geom_point(size = 10) +
-  scale_color_manual(values = c(Low = "#1d9e75", High = "#d8572a", "Some concerns" = "#e0a100")) +
-  theme_minimal() + labs(title = "Risk-of-bias traffic light")
+# robvis / QUADAS-2 style traffic-light plot. (For RoB2 you can also use the
+# dedicated 'robvis' package: install.packages('robvis'); robvis::rob_traffic_light().)
+lv <- tolower(df$Judgement)
+df$Level <- ifelse(grepl("low", lv), "Low",
+             ifelse(grepl("high|serious|critical", lv), "High", "Unclear"))
+df$Level <- factor(df$Level, levels = c("Low", "Unclear", "High"))
+df$Study <- factor(df$Study, levels = rev(unique(df$Study)))
+df$Domain <- factor(df$Domain, levels = unique(df$Domain))
+p <- ggplot(df, aes(Domain, Study)) +
+  geom_tile(fill = "white", color = "black", linewidth = 0.4) +
+  geom_point(aes(color = Level), size = 8) +
+  scale_color_manual(values = c(Low = "#4cae4f", Unclear = "#f5c518", High = "#e63329"), drop = FALSE) +
+  { if ("Panel" %in% names(df)) facet_grid(~ Panel, scales = "free_x", space = "free_x") else NULL } +
+  scale_x_discrete(position = "top") +
+  coord_equal() +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0, vjust = 0.5),
+        panel.grid = element_blank(), axis.title = element_blank(),
+        strip.text = element_text(face = "bold", size = 13)) +
+  labs(color = "")
 """),
 "gantt": ([], "gg", """
 df$Start <- as.Date(df$Start); df$End <- as.Date(df$End)

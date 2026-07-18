@@ -68,27 +68,52 @@ if is_prisma:
     default_reasons = "\n".join(f"{r} = {n}" for r, n in PR.EXAMPLE_REASONS)
     rtxt = st.text_area("Exclusion reasons", value=default_reasons, key="pr_reasons",
                         label_visibility="collapsed", height=120)
+
+    two_stream = st.checkbox("Add the 'other methods' identification stream "
+                             "(websites / organisations / citation searching)", value=False,
+                             help="Turns the single-column figure into the full two-stream PRISMA 2020 layout.")
+    om, om_rtxt = {}, ""
+    if two_stream:
+        oc = st.columns(2)
+        for i, (k, label, default) in enumerate(PR.OM_FIELDS):
+            om[k] = oc[i % 2].number_input(label, min_value=0, value=int(default), step=1, key=f"pr_{k}")
+        st.markdown("**Other-methods reports excluded — reasons** (`reason = count`):")
+        om_default = "\n".join(f"{r} = {n}" for r, n in PR.EXAMPLE_OM_REASONS)
+        om_rtxt = st.text_area("Other-methods exclusion reasons", value=om_default,
+                               key="pr_om_reasons", label_visibility="collapsed", height=90)
+
     title = st.text_input("Figure title", value="PRISMA 2020 flow diagram", key="pr_title")
 
-    if st.button("🖼 Generate PRISMA diagram", type="primary"):
-        reasons = []
-        for line in rtxt.splitlines():
+    def _parse_reasons(txt):
+        out = []
+        for line in txt.splitlines():
             line = line.strip()
             if not line:
                 continue
             if "=" in line:
                 r, n = line.rsplit("=", 1)
                 try:
-                    reasons.append((r.strip(), int(float(n.strip()))))
+                    out.append((r.strip(), int(float(n.strip()))))
                 except Exception:
-                    reasons.append((r.strip(), 0))
+                    out.append((r.strip(), 0))
             else:
-                reasons.append((line, 0))
+                out.append((line, 0))
+        return out
+
+    if st.button("🖼 Generate PRISMA diagram", type="primary"):
+        reasons = _parse_reasons(rtxt)
+        om_reasons = _parse_reasons(om_rtxt)
+        ttl = title or "PRISMA 2020 flow diagram"
         try:
             with jarvis_spinner("Drawing the PRISMA flow…"):
-                st.session_state["prisma_png"] = PR.flow_png(d, reasons=reasons or None,
-                                                             title=title or "PRISMA 2020 flow diagram")
-                st.session_state["prisma_r"] = PR.r_script(d, reasons=reasons or None)
+                if two_stream:
+                    st.session_state["prisma_png"] = PR.flow_png_2stream(
+                        d, om, reasons=reasons or None, om_reasons=om_reasons or None, title=ttl)
+                    st.session_state["prisma_r"] = PR.r_script(
+                        d, reasons=reasons or None, om=om, om_reasons=om_reasons or None)
+                else:
+                    st.session_state["prisma_png"] = PR.flow_png(d, reasons=reasons or None, title=ttl)
+                    st.session_state["prisma_r"] = PR.r_script(d, reasons=reasons or None)
         except Exception as e:
             st.error(f"Could not build the diagram: {e}")
 

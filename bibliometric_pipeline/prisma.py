@@ -46,6 +46,17 @@ FIELDS = [
 EXAMPLE_REASONS = [("Wrong population", 40), ("Wrong intervention/comparator", 30),
                    ("Wrong outcome", 15), ("No extractable data", 10)]
 
+# Optional second identification stream ("other methods") for the two-stream 2020 diagram.
+OM_FIELDS = [
+    ("om_websites", "Other methods — Websites (n)", 10),
+    ("om_orgs", "Other methods — Organisations (n)", 5),
+    ("om_citation", "Other methods — Citation searching (n)", 20),
+    ("om_sought", "Other methods — Reports sought for retrieval (n)", 30),
+    ("om_not_retrieved", "Other methods — Reports not retrieved (n)", 3),
+    ("om_assessed", "Other methods — Reports assessed for eligibility (n)", 27),
+]
+EXAMPLE_OM_REASONS = [("Wrong outcome", 8), ("No extractable data", 4)]
+
 
 def _box(ax, cx, cy, w, h, text, fs=10.5, fill=FILL, tc=INK, align="center"):
     ax.add_patch(FancyBboxPatch((cx - w/2, cy - h/2), w, h,
@@ -133,11 +144,115 @@ def flow_png(d, reasons=None, title="PRISMA 2020 flow diagram"):
     return buf.getvalue()
 
 
-def r_script(d, reasons=None):
-    """Matching PRISMA2020-style flow via DiagrammeR (reviewer-familiar)."""
+def flow_png_2stream(d, om, reasons=None, om_reasons=None, title="PRISMA 2020 flow diagram"):
+    """Two-stream PRISMA 2020: 'databases & registers' (left) + 'other methods'
+    (right, websites / organisations / citation searching), both feeding the
+    single 'studies included' box."""
+    reasons = reasons if reasons is not None else EXAMPLE_REASONS
+    om_reasons = om_reasons if om_reasons is not None else EXAMPLE_OM_REASONS
+    g = lambda k: int(d.get(k, 0) or 0)
+    go = lambda k: int(om.get(k, 0) or 0)
+
+    fig = plt.figure(figsize=(15.6, 12.6), dpi=200)
+    ax = fig.add_axes([0, 0, 1, 1]); ax.set_xlim(0, 1); ax.set_ylim(0, 1); ax.axis("off")
+
+    mxL, mwL = 0.205, 0.23      # left main
+    sxL, swL = 0.405, 0.165     # left excluded
+    mxR, mwR = 0.665, 0.23      # right main
+    sxR, swR = 0.865, 0.165     # right excluded
+    xE = (mxL + mxR) / 2        # included box centre
+
+    yA, yB, yC, yD, yE = 0.855, 0.640, 0.490, 0.335, 0.105
+
+    _band(ax, yA, 0.15, "Identification")
+    _band(ax, (yB + yD)/2, 0.36, "Screening")
+    _band(ax, yE, 0.12, "Included")
+
+    # stream titles
+    fig.text((mxL + sxL)/2, 0.965, "Identification of new studies via databases and registers",
+             ha="center", va="center", fontsize=12, fontweight="bold", color=INK)
+    fig.text((mxR + sxR)/2, 0.965, "Identification of studies via other methods",
+             ha="center", va="center", fontsize=12, fontweight="bold", color=INK)
+
+    # ---- LEFT stream (databases & registers) ----
+    _box(ax, mxL, yA, mwL, 0.10,
+         f"Records identified from:\nDatabases  (n = {g('databases')})\nRegisters  (n = {g('registers')})",
+         fs=10, align="left")
+    _box(ax, sxL, yA, swL, 0.12,
+         "Records removed before\nscreening:\n"
+         f"Duplicates removed  (n = {g('dup_removed')})\n"
+         f"Automation-ineligible  (n = {g('auto_ineligible')})\n"
+         f"Other reasons  (n = {g('other_removed')})", fs=8.6, align="left")
+    _arrow(ax, mxL + mwL/2, yA, sxL - swL/2, yA)
+
+    _box(ax, mxL, yB, mwL, 0.07, f"Records screened\n(n = {g('screened')})", fs=10)
+    _box(ax, sxL, yB, swL, 0.06, f"Records excluded\n(n = {g('records_excluded')})", fs=9, align="left")
+    _arrow(ax, mxL + mwL/2, yB, sxL - swL/2, yB)
+    _arrow(ax, mxL, yA - 0.05, mxL, yB + 0.036)
+
+    _box(ax, mxL, yC, mwL, 0.07, f"Reports sought for retrieval\n(n = {g('sought')})", fs=10)
+    _box(ax, sxL, yC, swL, 0.06, f"Reports not retrieved\n(n = {g('not_retrieved')})", fs=9, align="left")
+    _arrow(ax, mxL + mwL/2, yC, sxL - swL/2, yC)
+    _arrow(ax, mxL, yB - 0.036, mxL, yC + 0.036)
+
+    rtxtL = "Reports excluded:\n" + "\n".join(f"{r}  (n = {n})" for r, n in reasons)
+    _box(ax, mxL, yD, mwL, 0.07, f"Reports assessed for eligibility\n(n = {g('assessed')})", fs=10)
+    _box(ax, sxL, yD, swL, 0.05 + 0.022*len(reasons), rtxtL, fs=8.6, align="left")
+    _arrow(ax, mxL + mwL/2, yD, sxL - swL/2, yD)
+    _arrow(ax, mxL, yC - 0.036, mxL, yD + 0.036)
+
+    # ---- RIGHT stream (other methods) ----
+    _box(ax, mxR, yA, mwR, 0.10,
+         f"Records identified from:\nWebsites  (n = {go('om_websites')})\n"
+         f"Organisations  (n = {go('om_orgs')})\nCitation searching  (n = {go('om_citation')})",
+         fs=10, align="left")
+    _box(ax, mxR, yC, mwR, 0.07, f"Reports sought for retrieval\n(n = {go('om_sought')})", fs=10)
+    _box(ax, sxR, yC, swR, 0.06, f"Reports not retrieved\n(n = {go('om_not_retrieved')})", fs=9, align="left")
+    _arrow(ax, mxR + mwR/2, yC, sxR - swR/2, yC)
+    _arrow(ax, mxR, yA - 0.05, mxR, yC + 0.036)
+
+    rtxtR = "Reports excluded:\n" + "\n".join(f"{r}  (n = {n})" for r, n in om_reasons)
+    _box(ax, mxR, yD, mwR, 0.07, f"Reports assessed for eligibility\n(n = {go('om_assessed')})", fs=10)
+    _box(ax, sxR, yD, swR, 0.05 + 0.022*len(om_reasons), rtxtR, fs=8.6, align="left")
+    _arrow(ax, mxR + mwR/2, yD, sxR - swR/2, yD)
+    _arrow(ax, mxR, yC - 0.036, mxR, yD + 0.036)
+
+    # ---- Included (fed by both streams) ----
+    _box(ax, xE, yE, 0.30, 0.09,
+         f"Studies included in review  (n = {g('studies_included')})\n"
+         f"Reports of included studies  (n = {g('reports_included')})", fs=10.5)
+    _arrow(ax, mxL, yD - 0.036, xE - 0.06, yE + 0.045)
+    _arrow(ax, mxR, yD - 0.036, xE + 0.06, yE + 0.045)
+
+    fig.text(0.5, 0.992, title, ha="center", va="top", fontsize=15, fontweight="bold", color=INK)
+    fig.text(0.995, 0.006, "Jarvis Scholar", ha="right", va="bottom", fontsize=8,
+             color="#9fb0c4", style="italic")
+    buf = io.BytesIO(); fig.savefig(buf, format="png", dpi=200, bbox_inches="tight",
+                                    facecolor="white"); plt.close(fig)
+    return buf.getvalue()
+
+
+def r_script(d, reasons=None, om=None, om_reasons=None):
+    """Matching PRISMA2020-style flow via DiagrammeR (reviewer-familiar).
+    Pass `om` (+ `om_reasons`) to add the second 'other methods' stream."""
     reasons = reasons if reasons is not None else EXAMPLE_REASONS
     g = lambda k: int(d.get(k, 0) or 0)
     rlines = "\\n".join(f"{r} (n = {n})" for r, n in reasons)
+    om_nodes = om_edges = ""
+    if om:
+        om_reasons = om_reasons if om_reasons is not None else EXAMPLE_OM_REASONS
+        go = lambda k: int(om.get(k, 0) or 0)
+        orlines = "\\n".join(f"{r} (n = {n})" for r, n in om_reasons)
+        om_nodes = f'''
+  oa [label = 'Records identified from:\\nWebsites (n = {go('om_websites')})\\nOrganisations (n = {go('om_orgs')})\\nCitation searching (n = {go('om_citation')})']
+  oc [label = 'Reports sought for retrieval (n = {go('om_sought')})']
+  oc2[label = 'Reports not retrieved (n = {go('om_not_retrieved')})']
+  od [label = 'Reports assessed for eligibility (n = {go('om_assessed')})']
+  od2[label = 'Reports excluded:\\n{orlines}']'''
+        om_edges = '''
+  oa -> oc; oc -> od; od -> e
+  oc -> oc2; od -> od2
+  { rank = same; oc oc2 } { rank = same; od od2 }'''
     return f'''# PRISMA 2020 flow diagram — reproduce in RStudio
 # install.packages("DiagrammeR")
 library(DiagrammeR)
@@ -154,11 +269,11 @@ digraph prisma {{
   c2 [label = 'Reports not retrieved (n = {g('not_retrieved')})']
   d  [label = 'Reports assessed for eligibility (n = {g('assessed')})']
   d2 [label = 'Reports excluded:\\n{rlines}']
-  e  [label = 'Studies included in review (n = {g('studies_included')})\\nReports of included studies (n = {g('reports_included')})']
+  e  [label = 'Studies included in review (n = {g('studies_included')})\\nReports of included studies (n = {g('reports_included')})']{om_nodes}
 
   a -> b; b -> c; c -> d; d -> e
   a -> a2; b -> b2; c -> c2; d -> d2
-  {{ rank = same; a a2 }} {{ rank = same; b b2 }} {{ rank = same; c c2 }} {{ rank = same; d d2 }}
+  {{ rank = same; a a2 }} {{ rank = same; b b2 }} {{ rank = same; c c2 }} {{ rank = same; d d2 }}{om_edges}
 }}
 ")
 '''
