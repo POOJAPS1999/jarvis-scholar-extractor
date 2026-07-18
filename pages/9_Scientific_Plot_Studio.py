@@ -123,8 +123,9 @@ if st.button("📊 Generate figure", type="primary", disabled=(df is None)):
     else:
         try:
             with jarvis_spinner("Rendering your figure…"):
-                fig = spec.render(df, opt)
-                png = PS.fig_to_png(fig, dpi=int(dpi))
+                out = spec.render(df, opt)
+                # meta-analysis renderers already return finished PNG bytes
+                png = bytes(out) if isinstance(out, (bytes, bytearray)) else PS.fig_to_png(out, dpi=int(dpi))
             st.session_state["ps_png"] = png
             st.session_state["ps_id"] = spec.id
             st.session_state["ps_ctx"] = f"{spec.name}: {title}" if title else spec.name

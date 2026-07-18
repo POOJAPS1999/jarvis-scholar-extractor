@@ -638,6 +638,56 @@ p <- ggplot(df, aes(y = reorder(Task, -as.numeric(Start)))) +
   geom_segment(aes(x = Start, xend = End, yend = Task), linewidth = 6, color = "#2563eb") +
   theme_minimal() + labs(title = "Gantt / timeline", x = "Time", y = "Task")
 """),
+# --- 8. meta-analysis (metafor / mada) ---
+"forest_meta": (["metafor"], "base", """
+if (!("SE" %in% names(df)) || all(is.na(df$SE))) df$SE <- (df$UpperCI - df$LowerCI) / (2 * 1.959964)
+res <- rma(yi = df$Effect, sei = df$SE, method = "REML")
+print(summary(res)); forest(res, slab = df$Study, header = TRUE, addpred = TRUE)
+"""),
+"funnel_meta": (["metafor"], "base", """
+if (!("SE" %in% names(df)) || all(is.na(df$SE))) df$SE <- (df$UpperCI - df$LowerCI) / (2 * 1.959964)
+res <- rma(yi = df$Effect, sei = df$SE, method = "REML")
+funnel(res, level = c(90, 95, 99), shade = c("white", "gray55", "gray75"), legend = TRUE)
+regtest(res)   # Egger's test
+"""),
+"radial_meta": (["metafor"], "base", """
+if (!("SE" %in% names(df)) || all(is.na(df$SE))) df$SE <- (df$UpperCI - df$LowerCI) / (2 * 1.959964)
+radial(rma(yi = df$Effect, sei = df$SE, method = "REML"))
+"""),
+"baujat_meta": (["metafor"], "base", """
+if (!("SE" %in% names(df)) || all(is.na(df$SE))) df$SE <- (df$UpperCI - df$LowerCI) / (2 * 1.959964)
+baujat(rma(yi = df$Effect, sei = df$SE, method = "REML"))
+"""),
+"loo_meta": (["metafor"], "base", """
+if (!("SE" %in% names(df)) || all(is.na(df$SE))) df$SE <- (df$UpperCI - df$LowerCI) / (2 * 1.959964)
+res <- rma(yi = df$Effect, sei = df$SE, method = "REML")
+l <- leave1out(res)
+forest(l$estimate, sei = l$se, slab = paste("Omitting", df$Study), header = TRUE)
+"""),
+"cumul_meta": (["metafor"], "base", """
+if (!("SE" %in% names(df)) || all(is.na(df$SE))) df$SE <- (df$UpperCI - df$LowerCI) / (2 * 1.959964)
+o <- order(df$Year)
+res <- rma(yi = df$Effect[o], sei = df$SE[o], method = "REML")
+forest(cumul(res, order = df$Year[o]), slab = df$Study[o], header = TRUE)
+"""),
+"labbe_meta": (["metafor"], "base", """
+res <- rma(measure = "OR", ai = df$Events1, n1i = df$N1, ci = df$Events2, n2i = df$N2, data = df, method = "REML")
+labbe(res, xlab = "Control arm", ylab = "Treatment arm")
+"""),
+"sroc_meta": (["mada"], "base", """
+dm <- data.frame(TP = df$TP, FP = df$FP, FN = df$FN, TN = df$TN)
+fit <- reitsma(dm, correction = 0.5, correction.control = "all"); print(summary(fit))
+plot(fit, sroclwd = 2, xlim = c(0, 1), ylim = c(0, 1), main = "SROC (bivariate/HSROC)")
+ROCellipse(fit, add = TRUE, col = "firebrick")
+"""),
+"deeks_meta": (["mada"], "base", """
+dm <- data.frame(TP = df$TP, FP = df$FP, FN = df$FN, TN = df$TN)
+# Deeks' funnel-plot asymmetry test (effective sample size vs 1/DOR)
+ess <- with(dm, (TP+FN)*(FP+TN)/((TP+FN)+(FP+TN)))
+dor <- with(dm, (TP*TN)/(FP*FN)); dor[!is.finite(dor)] <- NA
+plot(1/sqrt(ess), log(dor), pch = 19, xlab = "1/sqrt(ESS)", ylab = "ln(DOR)", main = "Deeks' funnel")
+abline(lm(log(dor) ~ I(1/sqrt(ess))), col = "firebrick")
+"""),
 }
 
 

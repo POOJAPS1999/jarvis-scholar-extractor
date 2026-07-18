@@ -1689,3 +1689,119 @@ register(PlotSpec("gantt", "Gantt / timeline", "7. Study-flow diagrams",
      "Start": ["2026-01-01","2026-02-01","2026-05-01","2026-07-01"],
      "End": ["2026-02-01","2026-05-01","2026-07-01","2026-09-01"]},
     r_gantt))
+
+
+# ===========================================================================
+# CATEGORY 8 — META-ANALYSIS (reuses the polished bibliometric_pipeline.meta_analysis renderers)
+# ===========================================================================
+_MZ = 1.959963985
+
+def _meta_ec(df):
+    """Study-level effect + 95% CI (or SE) -> labels, yi, vi on the analysis scale."""
+    lab = _col(df, "Study").astype(str).tolist()
+    yi = _num(_col(df, "Effect")).values.astype(float)
+    se_c = _col(df, "SE")
+    if se_c is not None and _num(se_c).notna().any():
+        vi = _num(se_c).values.astype(float) ** 2
+    else:
+        lo = _num(_col(df, "LowerCI")).values.astype(float)
+        hi = _num(_col(df, "UpperCI")).values.astype(float)
+        vi = ((hi - lo) / (2 * _MZ)) ** 2
+    ok = np.isfinite(yi) & np.isfinite(vi) & (vi > 0)
+    return [l for l, o in zip(lab, ok) if o], yi[ok], vi[ok]
+
+_META_EC_COLS = [Column("Study", "text", True, "Study label"),
+                 Column("Effect", "number", True, "Effect on the analysis scale (use log OR/RR/HR for ratios)"),
+                 Column("LowerCI", "number", False, "Lower 95% CI (or give SE)"),
+                 Column("UpperCI", "number", False, "Upper 95% CI (or give SE)"),
+                 Column("SE", "number", False, "Standard error (alternative to CI)")]
+_META_EC_EX = {"Study": [f"Study {i}" for i in range(1, 9)],
+               "Effect": [0.20, 0.50, 0.10, 0.80, 0.40, 0.60, 0.30, 0.55],
+               "LowerCI": [-0.19, 0.06, -0.24, 0.32, 0.01, 0.16, -0.04, 0.11],
+               "UpperCI": [0.59, 0.94, 0.44, 1.28, 0.79, 1.04, 0.64, 0.99],
+               "SE": [None] * 8}
+
+def rm_forest(df, opt):
+    from . import meta_analysis as MA
+    lab, yi, vi = _meta_ec(df); r = MA.pool(yi, vi, "random")
+    return MA.forest_plot(lab, yi, vi, r, "raw", "Effect", title=(opt.title or ""))
+
+def rm_funnel(df, opt):
+    from . import meta_analysis as MA
+    lab, yi, vi = _meta_ec(df); r = MA.pool(yi, vi, "random")
+    return MA.funnel_plot(yi, vi, r, "raw", "Effect")
+
+def rm_radial(df, opt):
+    from . import meta_analysis as MA
+    lab, yi, vi = _meta_ec(df); return MA.radial_plot(yi, vi)
+
+def rm_baujat(df, opt):
+    from . import meta_analysis as MA
+    lab, yi, vi = _meta_ec(df); return MA.baujat_plot(lab, yi, vi)
+
+def rm_loo(df, opt):
+    from . import meta_analysis as MA
+    lab, yi, vi = _meta_ec(df); r = MA.pool(yi, vi, "random")
+    return MA._loo_forest(lab, MA.leave_one_out(yi, vi, "random"), r, "raw")
+
+def rm_cumulative(df, opt):
+    from . import meta_analysis as MA
+    lab, yi, vi = _meta_ec(df)
+    yr = _num(_col(df, "Year")).values
+    rows, idx = MA.cumulative(yi, vi, yr, "random")
+    return MA._cumulative_forest(lab, rows, idx, "raw")
+
+def rm_labbe(df, opt):
+    from . import meta_analysis as MA
+    return MA.labbe_plot(df)
+
+def rm_sroc(df, opt):
+    from . import meta_analysis as MA
+    return MA.run_dta(df).figures["Summary ROC (SROC)"]
+
+def rm_deeks(df, opt):
+    from . import meta_analysis as MA
+    return MA.run_dta(df).figures["Deeks' funnel plot"]
+
+_LABBE_COLS = [Column("Study", "text", True, "Study"), Column("Events1", "int", True, "Events, group 1"),
+               Column("N1", "int", True, "N, group 1"), Column("Events2", "int", True, "Events, group 2"),
+               Column("N2", "int", True, "N, group 2")]
+_LABBE_EX = {"Study": [f"Trial {i}" for i in range(1, 7)], "Events1": [12, 20, 8, 15, 25, 10],
+             "N1": [100, 110, 90, 120, 130, 95], "Events2": [20, 28, 14, 22, 33, 16],
+             "N2": [100, 108, 92, 118, 128, 96]}
+_DTA_COLS = [Column("Study", "text", True, "Study"), Column("TP", "int", True, "True positives"),
+             Column("FP", "int", True, "False positives"), Column("FN", "int", True, "False negatives"),
+             Column("TN", "int", True, "True negatives")]
+_DTA_EX = {"Study": [f"S{i}" for i in range(1, 8)], "TP": [25, 18, 30, 12, 40, 22, 33],
+           "FP": [3, 5, 4, 2, 6, 3, 5], "FN": [4, 6, 3, 5, 2, 4, 3], "TN": [60, 55, 70, 40, 80, 50, 65]}
+
+_CAT8 = "8. Meta-analysis"
+register(PlotSpec("forest_meta", "Forest plot", _CAT8,
+    "Publication-ready forest (meta::forest style) with pooled diamond, weights, heterogeneity and a "
+    "95% prediction-interval band. Effect on the analysis scale (log for ratios).",
+    _META_EC_COLS, _META_EC_EX, rm_forest))
+register(PlotSpec("funnel_meta", "Funnel plot (contour-enhanced)", _CAT8,
+    "Contour-enhanced funnel with significance shading + pooled pseudo-CI (publication-bias check).",
+    _META_EC_COLS, _META_EC_EX, rm_funnel))
+register(PlotSpec("radial_meta", "Radial (Galbraith) plot", _CAT8,
+    "Radial/Galbraith plot of standardized effect vs precision.",
+    _META_EC_COLS, _META_EC_EX, rm_radial))
+register(PlotSpec("baujat_meta", "Baujat plot", _CAT8,
+    "Which studies drive heterogeneity vs influence the pooled effect.",
+    _META_EC_COLS, _META_EC_EX, rm_baujat))
+register(PlotSpec("loo_meta", "Leave-one-out forest", _CAT8,
+    "Sensitivity analysis: pooled effect recomputed omitting each study in turn.",
+    _META_EC_COLS, _META_EC_EX, rm_loo))
+register(PlotSpec("cumul_meta", "Cumulative forest", _CAT8,
+    "How the evidence accrued — pooled effect after adding studies in order (needs a Year column).",
+    _META_EC_COLS + [Column("Year", "number", True, "Year / order for accumulation")],
+    {**_META_EC_EX, "Year": [2004, 2008, 2010, 2012, 2015, 2018, 2020, 2022]}, rm_cumulative))
+register(PlotSpec("labbe_meta", "L'Abbé plot", _CAT8,
+    "Binary-outcome event rates: control vs treatment arm per study.",
+    _LABBE_COLS, _LABBE_EX, rm_labbe))
+register(PlotSpec("sroc_meta", "SROC (diagnostic accuracy)", _CAT8,
+    "Summary ROC with the Reitsma bivariate/HSROC summary point + 95% confidence ellipse (from TP/FP/FN/TN).",
+    _DTA_COLS, _DTA_EX, rm_sroc))
+register(PlotSpec("deeks_meta", "Deeks' funnel (DTA bias)", _CAT8,
+    "Deeks' funnel-plot asymmetry test for diagnostic accuracy publication bias.",
+    _DTA_COLS, _DTA_EX, rm_deeks))
