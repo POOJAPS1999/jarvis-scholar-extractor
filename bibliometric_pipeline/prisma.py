@@ -81,7 +81,7 @@ def _band(ax, cy, h, label):
             fontsize=11.5, fontweight="bold", color=BAND_TX, zorder=3)
 
 
-def flow_png(d, reasons=None, title="PRISMA 2020 flow diagram"):
+def flow_png(d, reasons=None, title="PRISMA 2020 flow diagram", return_fig=False):
     reasons = reasons if reasons is not None else EXAMPLE_REASONS
     g = lambda k: int(d.get(k, 0) or 0)
 
@@ -139,12 +139,15 @@ def flow_png(d, reasons=None, title="PRISMA 2020 flow diagram"):
     fig.text(0.99, 0.008, "Jarvis Scholar", ha="right", va="bottom", fontsize=8,
              color="#9fb0c4", style="italic")
 
+    if return_fig:
+        return fig
     buf = io.BytesIO(); fig.savefig(buf, format="png", dpi=200, bbox_inches="tight",
                                     facecolor="white"); plt.close(fig)
     return buf.getvalue()
 
 
-def flow_png_2stream(d, om, reasons=None, om_reasons=None, title="PRISMA 2020 flow diagram"):
+def flow_png_2stream(d, om, reasons=None, om_reasons=None, title="PRISMA 2020 flow diagram",
+                     return_fig=False):
     """Two-stream PRISMA 2020: 'databases & registers' (left) + 'other methods'
     (right, websites / organisations / citation searching), both feeding the
     single 'studies included' box."""
@@ -227,6 +230,8 @@ def flow_png_2stream(d, om, reasons=None, om_reasons=None, title="PRISMA 2020 fl
     fig.text(0.5, 0.992, title, ha="center", va="top", fontsize=15, fontweight="bold", color=INK)
     fig.text(0.995, 0.006, "Jarvis Scholar", ha="right", va="bottom", fontsize=8,
              color="#9fb0c4", style="italic")
+    if return_fig:
+        return fig
     buf = io.BytesIO(); fig.savefig(buf, format="png", dpi=200, bbox_inches="tight",
                                     facecolor="white"); plt.close(fig)
     return buf.getvalue()

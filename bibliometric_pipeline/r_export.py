@@ -584,9 +584,24 @@ p <- ggplot(df, aes(reorder(Subject, -PctChange), PctChange, fill = PctChange < 
 """),
 # --- 7. study-flow ---
 "prisma": (["DiagrammeR"], "self", """
-nodes <- paste0('n', seq_len(nrow(df)), ' [label="', df$Stage, ' (n=', df$Count, ')", shape=box, style=rounded]')
-edges <- if (nrow(df) > 1) paste0('n', seq_len(nrow(df) - 1), ' -> n', 2:nrow(df), collapse = '; ') else ''
-grViz(paste0('digraph { rankdir=TB; ', paste(nodes, collapse = '; '), '; ', edges, ' }'))
+# PRISMA 2020 flow (databases & registers) rebuilt from the Field / Count table.
+gv <- function(cands){for(nm in cands){v<-df$Count[tolower(trimws(df$Field))==tolower(nm)]; if(length(v)) return(v[1])}; 0}
+rx <- df[grepl('^reason|^excluded:', tolower(trimws(as.character(df$Field)))), ]
+rlab <- if (nrow(rx)) paste(paste0(sub('^[^:]*:\\\\s*','',rx$Field),' (n = ',rx$Count,')'), collapse='\\\\n') else 'None'
+library(DiagrammeR)
+dot <- paste0("digraph prisma { graph [layout=dot, rankdir=TB, fontname=Helvetica] node [shape=box, style=filled, fillcolor=white, fontname=Helvetica] ",
+"a  [label='Records identified from:\\\\nDatabases (n = ", gv(c('databases')), ")\\\\nRegisters (n = ", gv(c('registers')), ")'] ",
+"a2 [label='Records removed before screening:\\\\nDuplicates (n = ", gv(c('duplicates removed','duplicates')), ")\\\\nAutomation-ineligible (n = ", gv(c('automation ineligible','automation-ineligible')), ")\\\\nOther (n = ", gv(c('other removed','other reasons')), ")'] ",
+"b  [label='Records screened (n = ", gv(c('records screened','screened')), ")'] ",
+"b2 [label='Records excluded (n = ", gv(c('records excluded')), ")'] ",
+"c  [label='Reports sought for retrieval (n = ", gv(c('reports sought','reports sought for retrieval')), ")'] ",
+"c2 [label='Reports not retrieved (n = ", gv(c('reports not retrieved','not retrieved')), ")'] ",
+"d  [label='Reports assessed for eligibility (n = ", gv(c('reports assessed','reports assessed for eligibility')), ")'] ",
+"d2 [label='Reports excluded:\\\\n", rlab, "'] ",
+"e  [label='Studies included (n = ", gv(c('studies included','studies included in review')), ")\\\\nReports of included studies (n = ", gv(c('reports included','reports of included studies')), ")'] ",
+"a->b b->c c->d d->e a->a2 b->b2 c->c2 d->d2 ",
+"{rank=same; a a2} {rank=same; b b2} {rank=same; c c2} {rank=same; d d2} }")
+grViz(dot)
 """),
 "consort": (["DiagrammeR"], "self", """
 nodes <- paste0('n', seq_len(nrow(df)), ' [label="', df$Stage, ' (n=', df$Count, ')", shape=box, style=rounded]')

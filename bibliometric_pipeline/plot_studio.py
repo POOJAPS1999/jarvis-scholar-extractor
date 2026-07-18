@@ -1500,16 +1500,53 @@ def _flow_diagram(df, opt, accent="#2563eb"):
                          arrowstyle="-|>", mutation_scale=14, lw=1.5, color="#c3a0a0"))
     return bare_finish(fig, opt, None)
 
-register(PlotSpec("prisma", "PRISMA flow", "7. Study-flow diagrams",
-    "Systematic-review study-selection flow. Add an Excluded/ExcludedReason to show side boxes.",
-    [Column("Stage","text",True,"Stage name"), Column("Count","number",True,"Records at this stage"),
-     Column("Excluded","text",False,"Number/label excluded (optional)"),
-     Column("ExcludedReason","text",False,"Reason for exclusion (optional)")],
-    {"Stage": ["Records identified","After duplicates removed","Screened","Full-text assessed","Included"],
-     "Count": [1200, 900, 900, 120, 45],
-     "Excluded": [None, 300, 780, 75, None],
-     "ExcludedReason": [None, "duplicates", "irrelevant", "criteria not met", None]},
-    _flow_diagram))
+_PRISMA_ALIAS = {
+    "databases": "databases", "registers": "registers",
+    "duplicates removed": "dup_removed", "duplicate records removed": "dup_removed", "duplicates": "dup_removed",
+    "automation ineligible": "auto_ineligible", "automation-ineligible": "auto_ineligible",
+    "records marked as ineligible by automation tools": "auto_ineligible",
+    "other removed": "other_removed", "records removed for other reasons": "other_removed", "other reasons": "other_removed",
+    "records screened": "screened", "screened": "screened",
+    "records excluded": "records_excluded", "records excluded after screening": "records_excluded",
+    "reports sought": "sought", "reports sought for retrieval": "sought",
+    "reports not retrieved": "not_retrieved", "not retrieved": "not_retrieved",
+    "reports assessed": "assessed", "reports assessed for eligibility": "assessed",
+    "studies included": "studies_included", "studies included in review": "studies_included",
+    "reports included": "reports_included", "reports of included studies": "reports_included",
+}
+
+def r_prisma2020(df, opt):
+    """PRISMA 2020 flow (databases & registers) from a Field / Count table.
+    Rows named 'Reason: <text>' fill the 'Reports excluded' box."""
+    from . import prisma as _PR
+    F = _col(df, "Field").astype(str); C = _col(df, "Count")
+    d, reasons = {}, []
+    for f, c in zip(F, C):
+        fl = str(f).strip().lower()
+        try:
+            cv = int(float(c))
+        except Exception:
+            cv = 0
+        if fl.startswith("reason") or fl.startswith("excluded:"):
+            lbl = str(f).split(":", 1)[1].strip() if ":" in str(f) else str(f)
+            reasons.append((lbl, cv))
+        elif fl in _PRISMA_ALIAS:
+            d[_PRISMA_ALIAS[fl]] = cv
+    return _PR.flow_png(d, reasons=reasons or None,
+                        title=opt.title or "PRISMA 2020 flow diagram", return_fig=True)
+
+register(PlotSpec("prisma", "PRISMA 2020 flow", "7. Study-flow diagrams",
+    "PRISMA 2020 study-selection flow (databases & registers). One row per box as Field + Count; "
+    "add 'Reason: <text>' rows for the 'Reports excluded' box. (The two-stream version and a form-based "
+    "builder live in the Meta-Analysis module.)",
+    [Column("Field","text",True,"PRISMA box (e.g. Databases, Records screened) or 'Reason: <text>'"),
+     Column("Count","number",True,"Count for that box")],
+    {"Field": ["Databases","Registers","Duplicates removed","Automation ineligible","Other removed",
+               "Records screened","Records excluded","Reports sought","Reports not retrieved","Reports assessed",
+               "Reason: Wrong population","Reason: Wrong outcome","Reason: No extractable data",
+               "Studies included","Reports included"],
+     "Count": [1200,25,290,0,10,925,780,145,5,140,40,30,10,45,50]},
+    r_prisma2020))
 
 register(PlotSpec("consort", "CONSORT flow", "7. Study-flow diagrams",
     "RCT participant flow (enrollment → allocation → follow-up → analysis).",
