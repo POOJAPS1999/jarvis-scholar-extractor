@@ -27,34 +27,38 @@ st.markdown(THEME_CSS, unsafe_allow_html=True)
 from bibliometric_pipeline.auth import require_login, sidebar_account
 require_login()
 sidebar_account()
-st.title("Fuzzy title match")
+st.title("Fuzzy match")
 st.caption(
-    "Match titles by similarity — no OpenAlex/PubMed/Crossref lookups. "
+    "Match any column by similarity (titles, authors, affiliations, journals, keywords, DOIs...) — no OpenAlex/PubMed/Crossref lookups. "
     "Great for reconciling two title lists or finding duplicates in one."
 )
 
 with st.expander("📋 Required format — download a blank template", expanded=False):
     st.markdown(
-        "Each file just needs a column of titles (a `Title` column works out of the box; "
-        "any column can be picked after upload). Use **one** file to find duplicates, or "
+        "Each file just needs one column to match on (you pick which column after upload, so it works on titles, authors, affiliations, journals, keywords, DOIs or any text field; a `Title` column is there by default, "
+        "but any column of your choice works). Use **one** file to find duplicates, or "
         "**two** files to compare lists."
     )
     st.download_button(
-        "⬇ Download blank titles template (.xlsx)",
+        "⬇ Download blank template (.xlsx)",
         data=fuzzy_titles_template_bytes(),
-        file_name="jarvis_scholar_titles_template.xlsx",
+        file_name="jarvis_scholar_match_template.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
 
-def _pick_title_column(df, key, label="title column"):
+def _pick_title_column(df, key, label="match on"):
+    """Generic column picker: smart-guesses a title/name/id column, but any column is selectable."""
     guess = 0
     for i, c in enumerate(df.columns):
-        if str(c).strip().lower() in ("clean title", "title", "titles"):
+        if str(c).strip().lower() in ("clean title", "title", "titles", "name", "author", "authors",
+                                       "affiliation", "affiliations", "journal", "source", "doi",
+                                       "keyword", "keywords"):
             guess = i
             break
-    return st.selectbox(f"Which column holds the {label}?", list(df.columns),
-                        index=guess, key=key)
+    return st.selectbox(f"Which column do you want to {label}?", list(df.columns),
+                        index=guess, key=key,
+                        help="Any column works: titles, authors, affiliations, journals, DOIs, keywords, etc.")
 
 
 mode = st.radio(
@@ -77,7 +81,7 @@ if mode == "Compare two lists":
         up_b = st.file_uploader("List B (.xlsx / .csv)", type=["xlsx", "xls", "csv"], key="b")
 
     if not (up_a and up_b):
-        st.info("Upload both lists to compare. Each title in A gets its single best match from B.")
+        st.info("Upload both lists to compare. Each value in A gets its single best match from B.")
         st.stop()
 
     try:
@@ -87,28 +91,29 @@ if mode == "Compare two lists":
         st.error(f"Could not read a file: {e}")
         st.stop()
 
-    col_a = _pick_title_column(df_a, "col_a", "titles in List A")
-    col_b = _pick_title_column(df_b, "col_b", "titles in List B")
+    col_a = _pick_title_column(df_a, "col_a", "match on in List A")
+    col_b = _pick_title_column(df_b, "col_b", "match on in List B")
 
     if st.button("Run match", type="primary"):
         _loader = st.empty()
-        _loader.markdown(reactor_loader_html("JARVIS is matching titles…"), unsafe_allow_html=True)
-        with jarvis_spinner("Comparing every title in A against List B…"):
-            result = cross_match(df_a[col_a].tolist(), df_b[col_b].tolist(), threshold=threshold)
+        _loader.markdown(reactor_loader_html("JARVIS is matching your rows…"), unsafe_allow_html=True)
+        with jarvis_spinner("Comparing every value in A against List B…"):
+            result = cross_match(df_a[col_a].tolist(), df_b[col_b].tolist(),
+                                 threshold=threshold, label=str(col_a))
         _loader.empty()
         n_matched = int((result["Matched"] == "Yes").sum())
-        st.success(f"{n_matched} of {len(result)} titles in List A matched at ≥ {threshold}.")
+        st.success(f"{n_matched} of {len(result)} rows in List A matched at ≥ {threshold}.")
         m = st.columns(3)
-        m[0].metric("List A titles", len(df_a))
+        m[0].metric("List A rows", len(df_a))
         m[1].metric("Matched", n_matched)
         m[2].metric("Unmatched", len(result) - n_matched)
         st.dataframe(result, width="stretch", hide_index=True)
         download_buttons(result, stem="fuzzy_cross_match", key_prefix="xmatch", sheet_name="Matches")
 
 else:  # self-dedup
-    up = st.file_uploader("Title list (.xlsx / .csv)", type=["xlsx", "xls", "csv"], key="dedup")
+    up = st.file_uploader("Your list (.xlsx / .csv)", type=["xlsx", "xls", "csv"], key="dedup")
     if not up:
-        st.info("Upload one list. Every pair of near-duplicate titles above the threshold is reported.")
+        st.info("Upload one list. Every pair of near-duplicate values above the threshold is reported.")
         st.stop()
 
     try:
@@ -122,14 +127,14 @@ else:  # self-dedup
     if st.button("Find duplicates", type="primary"):
         _loader = st.empty()
         _loader.markdown(reactor_loader_html("JARVIS is scanning for duplicates…"), unsafe_allow_html=True)
-        with jarvis_spinner("Comparing every pair of titles… (this can take a moment on long lists)"):
-            result = self_dedup(df[col].tolist(), threshold=threshold)
+        with jarvis_spinner("Comparing every pair of values… (this can take a moment on long lists)"):
+            result = self_dedup(df[col].tolist(), threshold=threshold, label=str(col))
         _loader.empty()
         if result.empty:
             st.success(f"No near-duplicate pairs found at ≥ {threshold}.")
         else:
-            n_titles = df[col].astype(str).str.strip().ne("").sum()
-            st.success(f"Found {len(result)} near-duplicate pair(s) among {n_titles} titles.")
+            n_vals = df[col].astype(str).str.strip().ne("").sum()
+            st.success(f"Found {len(result)} near-duplicate pair(s) among {n_vals} values.")
             st.dataframe(result, width="stretch", hide_index=True)
             download_buttons(result, stem="fuzzy_duplicates", key_prefix="dedup", sheet_name="Duplicates")
 
@@ -137,10 +142,10 @@ brand_footer()
 st.markdown("---")
 how_to_use([
     ("🔀", "Pick a mode",
-     "‘Compare two lists’ finds the best match in list B for each title in A. "
+     "‘Compare two lists’ finds the best match in list B for each value in A. "
      "‘Find duplicates in one list’ reports near-duplicate pairs within a single list."),
     ("📤", "Upload your list(s)",
-     "Upload one .xlsx/.csv (dedup) or two (compare). Each just needs a column of titles."),
+     "Upload one .xlsx/.csv (dedup) or two (compare). Each just needs one column to match on (any field)."),
     ("🎚", "Set the match threshold",
      "Higher = stricter. 85 matches the pipeline’s auto-accept level; 75 is its ‘needs review’ floor."),
     ("▶️", "Run it",
@@ -148,4 +153,4 @@ how_to_use([
     ("⬇️", "Review & download",
      "Check the matched/duplicate pairs and scores, then download as CSV or Excel."),
 ], preview_image=fuzzy_preview(),
-   preview_caption="A simple Title column is all each file needs (download the template above)")
+   preview_caption="Pick any column to match on after upload (a Title column is provided by default)")

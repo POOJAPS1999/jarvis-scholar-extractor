@@ -27,26 +27,29 @@ def _clean_series(values) -> List[str]:
 
 
 def cross_match(
-    left_titles,
-    right_titles,
+    left_values,
+    right_values,
     threshold: float = 85.0,
     left_ids: Optional[list] = None,
     right_ids: Optional[list] = None,
+    label: str = "value",
 ) -> pd.DataFrame:
-    """For each title in `left_titles`, find its single best match in
-    `right_titles` and report the score. Rows below `threshold` are still
-    returned but marked as unmatched (Best Match blank, Matched = No), so the
-    caller sees the full left list and can see what *didn't* match.
+    """For each value in `left_values`, find its single best match in
+    `right_values` and report the score. Works on ANY text field — titles,
+    author names, affiliations, journals, DOIs, serial numbers, etc.
 
-    Returns a DataFrame: Left #, Left Title, Best Match #, Best Match Title,
-    Score, Matched.
+    Rows below `threshold` are still returned but marked unmatched (Matched =
+    No) so the caller sees the full left list and what *didn't* match.
+
+    Returns a DataFrame: A row, A <label>, Match row, Match <label>, Score, Matched.
     """
-    left = _clean_series(left_titles)
-    right = _clean_series(right_titles)
+    lab = str(label).strip() or "value"
+    left = _clean_series(left_values)
+    right = _clean_series(right_values)
     left_ids = list(left_ids) if left_ids is not None else list(range(1, len(left) + 1))
     right_ids = list(right_ids) if right_ids is not None else list(range(1, len(right) + 1))
 
-    # Pre-clean the right side once (not once per left title).
+    # Pre-clean the right side once (not once per left value).
     right_clean = [clean_for_match(r) for r in right]
 
     rows = []
@@ -62,25 +65,27 @@ def cross_match(
                     best_score, best_j = s, j
         matched = best_j >= 0 and best_score >= threshold
         rows.append({
-            "Left #": left_ids[i],
-            "Left Title": lt,
-            "Best Match #": right_ids[best_j] if matched else "",
-            "Best Match Title": right[best_j] if matched else "",
+            "A row": left_ids[i],
+            f"A {lab}": lt,
+            "Match row": right_ids[best_j] if matched else "",
+            f"Match {lab}": right[best_j] if matched else "",
             "Score": round(best_score, 1) if best_j >= 0 else 0.0,
             "Matched": "Yes" if matched else "No",
         })
     return pd.DataFrame(rows, columns=[
-        "Left #", "Left Title", "Best Match #", "Best Match Title", "Score", "Matched"])
+        "A row", f"A {lab}", "Match row", f"Match {lab}", "Score", "Matched"])
 
 
-def self_dedup(titles, threshold: float = 85.0, ids: Optional[list] = None) -> pd.DataFrame:
-    """Find near-duplicate pairs WITHIN a single list. Compares every unique
-    unordered pair once (i < j) and returns those scoring >= threshold,
-    highest score first.
+def self_dedup(values, threshold: float = 85.0, ids: Optional[list] = None,
+               label: str = "value") -> pd.DataFrame:
+    """Find near-duplicate pairs WITHIN a single list, on ANY text field.
+    Compares every unique unordered pair once (i < j) and returns those
+    scoring >= threshold, highest score first.
 
-    Returns a DataFrame: A #, A Title, B #, B Title, Score.
+    Returns a DataFrame: A row, A <label>, B row, B <label>, Score.
     """
-    vals = _clean_series(titles)
+    lab = str(label).strip() or "value"
+    vals = _clean_series(values)
     ids = list(ids) if ids is not None else list(range(1, len(vals) + 1))
     clean = [clean_for_match(v) for v in vals]
 
@@ -95,11 +100,11 @@ def self_dedup(titles, threshold: float = 85.0, ids: Optional[list] = None) -> p
             s = fuzzy_score(clean[i], clean[j])
             if s >= threshold:
                 rows.append({
-                    "A #": ids[i], "A Title": vals[i],
-                    "B #": ids[j], "B Title": vals[j],
+                    "A row": ids[i], f"A {lab}": vals[i],
+                    "B row": ids[j], f"B {lab}": vals[j],
                     "Score": round(s, 1),
                 })
-    df = pd.DataFrame(rows, columns=["A #", "A Title", "B #", "B Title", "Score"])
+    df = pd.DataFrame(rows, columns=["A row", f"A {lab}", "B row", f"B {lab}", "Score"])
     if not df.empty:
         df = df.sort_values("Score", ascending=False, kind="stable").reset_index(drop=True)
     return df
