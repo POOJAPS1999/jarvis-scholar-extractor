@@ -1918,3 +1918,122 @@ register(PlotSpec("nma_rank", "Treatment ranking / P-scores (NMA)", _CAT8,
 register(PlotSpec("nma_nodesplit", "Node-splitting (NMA consistency)", _CAT8,
     "Direct vs indirect estimate for every comparison — the in-network inconsistency check.",
     _NMA_COLS, _NMA_EX, rm_nma_nodesplit))
+
+
+# ===========================================================================
+# CATEGORY 9 — SPECIALISED (pure-matplotlib; no geo/native deps)
+# ===========================================================================
+_CAT9 = "9. Specialised"
+_INK9, _SUB9 = "#12283b", "#41566b"
+
+def rm_polar(df, opt):
+    cats = _col(df, "Category").astype(str).tolist()
+    val = _num(_col(df, "Value")).values.astype(float)
+    ok = np.isfinite(val); cats = [c for c, o in zip(cats, ok) if o]; val = val[ok]
+    n = len(val); ang = np.linspace(0, 2 * np.pi, n, endpoint=False)
+    cols = palette(opt, n)
+    fig = plt.figure(figsize=(7.4, 7.4), dpi=200); ax = fig.add_subplot(111, projection="polar")
+    ax.bar(ang, val, width=2 * np.pi / max(n, 1) * 0.9, color=[cols[i % len(cols)] for i in range(n)],
+           edgecolor="white", linewidth=0.8, zorder=3)
+    ax.set_xticks(ang); ax.set_xticklabels(cats, fontsize=9, color=_INK9)
+    ax.set_yticklabels([]); ax.spines["polar"].set_visible(False)
+    ax.set_title(opt.title or "Circular bar chart", fontsize=13, fontweight="bold", color=_INK9, pad=22)
+    if opt.watermark:
+        fig.text(0.99, 0.01, "Jarvis Scholar", ha="right", va="bottom", fontsize=8, color="#b8c6d6", style="italic")
+    return fig
+
+def rm_ternary(df, opt):
+    A = _num(_col(df, "A")).values.astype(float); B = _num(_col(df, "B")).values.astype(float)
+    C = _num(_col(df, "C")).values.astype(float)
+    lc = _col(df, "Label"); labels = lc.astype(str).tolist() if lc is not None else [None] * len(A)
+    s = A + B + C; s[s == 0] = 1.0; a, b, c = A / s, B / s, C / s
+    P0, P1, P2 = np.array([0, 0]), np.array([1, 0]), np.array([0.5, np.sqrt(3) / 2])
+    xy = np.outer(a, P0) + np.outer(b, P1) + np.outer(c, P2)
+    cols = palette(opt, 8)
+    fig, ax = plt.subplots(figsize=(7.2, 6.4), dpi=200)
+    tri = np.array([P0, P1, P2, P0]); ax.plot(tri[:, 0], tri[:, 1], color=_SUB9, lw=1.4, zorder=2)
+    for t in np.arange(0.2, 1.0, 0.2):
+        for U, V, W in [(P0, P1, P2), (P1, P0, P2), (P2, P0, P1)]:
+            ax.plot([t * V[0] + (1 - t) * U[0], t * W[0] + (1 - t) * U[0]],
+                    [t * V[1] + (1 - t) * U[1], t * W[1] + (1 - t) * U[1]], color="#e6edf5", lw=0.8, zorder=1)
+    ax.scatter(xy[:, 0], xy[:, 1], s=75, color=cols[0], edgecolor="white", lw=0.7, zorder=3)
+    for (x, y), l in zip(xy, labels):
+        if l:
+            ax.annotate(l, (x, y), fontsize=8, color=_SUB9, xytext=(3, 3), textcoords="offset points")
+    ax.text(P0[0] - 0.03, P0[1] - 0.03, "A", ha="right", va="top", fontsize=13, fontweight="bold", color=_INK9)
+    ax.text(P1[0] + 0.03, P1[1] - 0.03, "B", ha="left", va="top", fontsize=13, fontweight="bold", color=_INK9)
+    ax.text(P2[0], P2[1] + 0.04, "C", ha="center", va="bottom", fontsize=13, fontweight="bold", color=_INK9)
+    ax.set_aspect("equal"); ax.axis("off")
+    ax.set_title(opt.title or "Ternary plot", fontsize=13, fontweight="bold", color=_INK9)
+    return fig
+
+def rm_chord(df, opt):
+    from matplotlib.path import Path as _Pth
+    import matplotlib.patches as _mp
+    src = _col(df, "Source").astype(str).tolist(); tgt = _col(df, "Target").astype(str).tolist()
+    val = _num(_col(df, "Value")).values.astype(float)
+    nodes = list(dict.fromkeys(src + tgt)); n = len(nodes)
+    ix = {x: i for i, x in enumerate(nodes)}
+    ang = {x: 2 * np.pi * i / n for i, x in enumerate(nodes)}
+    pos = {x: (np.cos(ang[x]), np.sin(ang[x])) for x in nodes}
+    cols = palette(opt, n); vmax = val.max() if len(val) else 1.0
+    fig, ax = plt.subplots(figsize=(7.6, 7.6), dpi=200)
+    for sname, tname, v in zip(src, tgt, val):
+        x0, y0 = pos[sname]; x1, y1 = pos[tname]
+        cx, cy = 0.15 * (x0 + x1), 0.15 * (y0 + y1)
+        path = _Pth([(x0, y0), (cx, cy), (x1, y1)], [_Pth.MOVETO, _Pth.CURVE3, _Pth.CURVE3])
+        ax.add_patch(_mp.PathPatch(path, fill=False, edgecolor=cols[ix[sname] % len(cols)],
+                                   lw=0.8 + 4.5 * v / vmax, alpha=0.5, zorder=2))
+    for x in nodes:
+        px, py = pos[x]
+        ax.scatter([px], [py], s=190, color=cols[ix[x] % len(cols)], edgecolor="white", lw=1.1, zorder=3)
+        ax.text(px * 1.13, py * 1.13, x, ha="left" if px >= 0 else "right", va="center", fontsize=10, color=_INK9)
+    ax.set_xlim(-1.45, 1.45); ax.set_ylim(-1.45, 1.45); ax.set_aspect("equal"); ax.axis("off")
+    ax.set_title(opt.title or "Chord diagram", fontsize=13, fontweight="bold", color=_INK9)
+    return fig
+
+def rm_geobubble(df, opt):
+    lat = _num(_col(df, "Lat")).values.astype(float); lon = _num(_col(df, "Lon")).values.astype(float)
+    val = _num(_col(df, "Value")).values.astype(float)
+    lc = _col(df, "Label"); labels = lc.astype(str).tolist() if lc is not None else [None] * len(lat)
+    ok = np.isfinite(lat) & np.isfinite(lon); lat, lon, val = lat[ok], lon[ok], val[ok]
+    labels = [l for l, o in zip(labels, ok) if o]
+    fig, ax = plt.subplots(figsize=(9.2, 5.2), dpi=200)
+    ax.set_xlim(-180, 180); ax.set_ylim(-90, 90)
+    ax.set_xticks(range(-180, 181, 60)); ax.set_yticks(range(-90, 91, 30))
+    ax.grid(True, color="#e6edf5", lw=0.8, zorder=1); ax.set_axisbelow(True)
+    vmax = val.max() if len(val) and val.max() > 0 else 1.0
+    ax.scatter(lon, lat, s=40 + (val / vmax) * 620, color=palette(opt, 1)[0], alpha=0.55,
+               edgecolor=_SUB9, lw=0.6, zorder=3)
+    for x, y, l in zip(lon, lat, labels):
+        if l:
+            ax.annotate(l, (x, y), fontsize=8, color=_SUB9, xytext=(4, 4), textcoords="offset points")
+    ax.set_xlabel("Longitude", fontsize=11, color=_SUB9); ax.set_ylabel("Latitude", fontsize=11, color=_SUB9)
+    ax.set_title(opt.title or "Geographic bubble map", fontsize=13, fontweight="bold", color=_INK9)
+    for sp in ("top", "right"): ax.spines[sp].set_visible(False)
+    fig.tight_layout(); return fig
+
+register(PlotSpec("polar_bar", "Polar / circular bar", _CAT9,
+    "Bars arranged around a circle — good for cyclical categories (months, hours, compass).",
+    [Column("Category", "text", True, "Category label"), Column("Value", "number", True, "Bar length")],
+    {"Category": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+     "Value": [12, 18, 25, 33, 40, 46, 44, 39, 30, 22, 15, 10]}, rm_polar))
+register(PlotSpec("ternary", "Ternary plot", _CAT9,
+    "Three-part composition on a triangle (each point's A+B+C is normalised to 100%).",
+    [Column("A", "number", True, "Component A"), Column("B", "number", True, "Component B"),
+     Column("C", "number", True, "Component C"), Column("Label", "text", False, "Point label (optional)")],
+    {"A": [60, 30, 20, 45, 10], "B": [30, 50, 20, 25, 70], "C": [10, 20, 60, 30, 20],
+     "Label": ["S1", "S2", "S3", "S4", "S5"]}, rm_ternary))
+register(PlotSpec("chord", "Chord diagram", _CAT9,
+    "Category-to-category relations/flows around a circle (link thickness = value).",
+    [Column("Source", "text", True, "From node"), Column("Target", "text", True, "To node"),
+     Column("Value", "number", True, "Flow / weight")],
+    {"Source": ["A", "A", "B", "B", "C", "C", "D"], "Target": ["B", "C", "C", "D", "D", "A", "B"],
+     "Value": [5, 8, 3, 6, 4, 7, 2]}, rm_chord))
+register(PlotSpec("geo_bubble", "Geographic bubble map", _CAT9,
+    "Lat/Lon points sized by value (a lightweight geographic scatter — no basemap dependency).",
+    [Column("Lat", "number", True, "Latitude"), Column("Lon", "number", True, "Longitude"),
+     Column("Value", "number", True, "Bubble size"), Column("Label", "text", False, "Place label (optional)")],
+    {"Lat": [28.6, 19.1, 13.1, 22.6, 12.9], "Lon": [77.2, 72.9, 80.3, 88.4, 77.6],
+     "Value": [120, 90, 60, 75, 50], "Label": ["Delhi", "Mumbai", "Chennai", "Kolkata", "Bengaluru"]},
+    rm_geobubble))

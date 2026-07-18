@@ -721,6 +721,31 @@ barplot(sort(nr$ranking.random, decreasing = TRUE), ylab = "P-score", las = 2, c
 nm <- netmeta(TE, seTE, Treatment1, Treatment2, Study, data = df, sm = "OR", random = TRUE)
 ns <- netsplit(nm); print(ns); forest(ns)
 """),
+# --- 9. specialised ---
+"polar_bar": ([], "gg", """
+df$Category <- factor(df$Category, levels = df$Category)
+p <- ggplot(df, aes(x = Category, y = Value, fill = Category)) +
+  geom_col(width = 0.9) + coord_polar() +
+  theme_minimal() + theme(legend.position = "none", axis.title = element_blank()) +
+  labs(title = "Circular bar chart")
+"""),
+"ternary": (["ggtern"], "gg", """
+p <- ggtern(data = df, aes(x = A, y = B, z = C)) +
+  geom_point(color = "#2563eb", size = 3) +
+  theme_bw() + labs(title = "Ternary plot")
+"""),
+"chord": (["circlize"], "base", """
+chordDiagram(data.frame(from = df$Source, to = df$Target, value = df$Value),
+             transparency = 0.35)
+title("Chord diagram")
+"""),
+"geo_bubble": (["maps"], "gg", """
+p <- ggplot() +
+  borders("world", fill = "grey90", colour = "grey75") +
+  geom_point(data = df, aes(x = Lon, y = Lat, size = Value), color = "#2563eb", alpha = 0.6) +
+  { if ("Label" %in% names(df)) geom_text(data = df, aes(x = Lon, y = Lat, label = Label), size = 3, vjust = -1) else NULL } +
+  coord_quickmap() + theme_minimal() + labs(title = "Geographic bubble map", x = "Longitude", y = "Latitude")
+"""),
 }
 
 
