@@ -20,6 +20,7 @@ from bibliometric_pipeline.branding import THEME_CSS, jarvis_spinner, how_to_use
 from bibliometric_pipeline import meta_analysis as MA
 from bibliometric_pipeline import network_meta as NM
 from bibliometric_pipeline import es_calc as EC
+from bibliometric_pipeline import prisma as PR
 
 st.set_page_config(page_title="Jarvis Scholar - Meta-Analysis", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -44,11 +45,71 @@ def _read(file):
 
 NMA_CAT = "Network meta-analysis"
 CALC_CAT = "Effect-size calculator (data prep)"
+PRISMA_CAT = "PRISMA 2020 flow diagram"
 cats = MA.by_category()
-cat_list = list(cats.keys()) + [NMA_CAT, CALC_CAT]
+cat_list = list(cats.keys()) + [NMA_CAT, CALC_CAT, PRISMA_CAT]
 cat = st.selectbox("What are you meta-analysing?", cat_list)
 is_nma = cat == NMA_CAT
 is_calc = cat == CALC_CAT
+is_prisma = cat == PRISMA_CAT
+
+# ===========================================================================
+# PRISMA 2020 flow diagram — self-contained form flow
+# ===========================================================================
+if is_prisma:
+    st.markdown("#### PRISMA 2020 flow diagram")
+    st.caption("Enter your study-selection counts → get a publication-ready PRISMA 2020 figure "
+               "(databases & registers template) plus a matching DiagrammeR R script.")
+    d = {}
+    fc = st.columns(2)
+    for i, (k, label, default) in enumerate(PR.FIELDS):
+        d[k] = fc[i % 2].number_input(label, min_value=0, value=int(default), step=1, key=f"pr_{k}")
+    st.markdown("**Reports excluded — reasons** (one per line, as `reason = count`):")
+    default_reasons = "\n".join(f"{r} = {n}" for r, n in PR.EXAMPLE_REASONS)
+    rtxt = st.text_area("Exclusion reasons", value=default_reasons, key="pr_reasons",
+                        label_visibility="collapsed", height=120)
+    title = st.text_input("Figure title", value="PRISMA 2020 flow diagram", key="pr_title")
+
+    if st.button("🖼 Generate PRISMA diagram", type="primary"):
+        reasons = []
+        for line in rtxt.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if "=" in line:
+                r, n = line.rsplit("=", 1)
+                try:
+                    reasons.append((r.strip(), int(float(n.strip()))))
+                except Exception:
+                    reasons.append((r.strip(), 0))
+            else:
+                reasons.append((line, 0))
+        try:
+            with jarvis_spinner("Drawing the PRISMA flow…"):
+                st.session_state["prisma_png"] = PR.flow_png(d, reasons=reasons or None,
+                                                             title=title or "PRISMA 2020 flow diagram")
+                st.session_state["prisma_r"] = PR.r_script(d, reasons=reasons or None)
+        except Exception as e:
+            st.error(f"Could not build the diagram: {e}")
+
+    if st.session_state.get("prisma_png"):
+        st.image(st.session_state["prisma_png"], width="stretch")
+        p1, p2 = st.columns(2)
+        p1.download_button("⬇ PRISMA diagram (PNG)", data=st.session_state["prisma_png"],
+                           file_name="prisma_2020_flow.png", mime="image/png", width="stretch")
+        p2.download_button("⬇ R script (DiagrammeR)", data=st.session_state["prisma_r"].encode("utf-8"),
+                           file_name="prisma_2020_flow.R", mime="text/plain", width="stretch")
+    st.markdown("---")
+    how_to_use([
+        ("🔢", "Enter your counts", "Databases/registers found, duplicates removed, screened, excluded, "
+         "reports sought/assessed, and studies included."),
+        ("📝", "List exclusion reasons", "One per line as 'reason = count' — they fill the 'Reports excluded' box."),
+        ("🖼", "Generate", "Get the PRISMA 2020 figure (databases & registers version)."),
+        ("⬇", "Export", "Download a high-res PNG for your manuscript, or a DiagrammeR R script."),
+    ])
+    st.caption("Follows the PRISMA 2020 template: a 'records removed before screening' box and "
+               "'Reports' wording. For the two-stream version (other methods / citation searching), ask to enable it.")
+    st.stop()
 
 # ===========================================================================
 # Effect-size calculator (data prep) — its own self-contained flow
