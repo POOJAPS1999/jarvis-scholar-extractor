@@ -1,12 +1,12 @@
 """
 Meta-Analysis
 =============
-No-setup meta-analysis: pairwise (intervention, prognostic, prevalence,
-correlation, pre-post, generic), diagnostic test accuracy (DTA), and
-network meta-analysis (NMA). Choose your analysis, download the Excel
-template, upload, and get pooled effects + publication-ready figures +
-an R script (metafor / meta / mada / netmeta). Engines:
-bibliometric_pipeline.meta_analysis and .network_meta.
+Pairwise (intervention, prognostic, prevalence, correlation, pre-post, generic),
+diagnostic test accuracy (DTA), network meta-analysis (NMA), plus an
+effect-size calculator (data prep). Choose your analysis, download the Excel
+template, upload, and get pooled effects + publication-ready figures + an R
+script (metafor / meta / mada / netmeta). Engines: bibliometric_pipeline.
+meta_analysis, .network_meta and .es_calc.
 """
 import os
 import sys
@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from bibliometric_pipeline.branding import THEME_CSS, jarvis_spinner, how_to_use, brand_footer
 from bibliometric_pipeline import meta_analysis as MA
 from bibliometric_pipeline import network_meta as NM
+from bibliometric_pipeline import es_calc as EC
 
 st.set_page_config(page_title="Jarvis Scholar - Meta-Analysis", layout="wide")
 st.markdown(THEME_CSS, unsafe_allow_html=True)
@@ -28,45 +29,144 @@ sidebar_account()
 
 st.title("Meta-Analysis")
 st.caption("Choose your analysis → download the Excel template → upload → get pooled effects, "
-           "publication-ready figures and an R script. Pairwise, diagnostic accuracy (DTA) and "
-           "network meta-analysis (NMA) are all supported.")
+           "publication-ready figures and an R script. Pairwise (with REML / Paule–Mandel, "
+           "Mantel–Haenszel & Peto), diagnostic accuracy (DTA), network meta-analysis (NMA) and an "
+           "effect-size calculator are all supported.")
+
+
+def _read(file):
+    if file.name.lower().endswith(".csv"):
+        return pd.read_csv(file)
+    xls = pd.ExcelFile(file)
+    sheet = "Data" if "Data" in xls.sheet_names else xls.sheet_names[0]
+    return pd.read_excel(xls, sheet_name=sheet)
+
 
 NMA_CAT = "Network meta-analysis"
+CALC_CAT = "Effect-size calculator (data prep)"
 cats = MA.by_category()
-cat_list = list(cats.keys()) + [NMA_CAT]
-
-c0, c1, c2, c3 = st.columns([1.5, 1.6, 1, 0.9])
-cat = c0.selectbox("What are you meta-analysing?", cat_list)
+cat_list = list(cats.keys()) + [NMA_CAT, CALC_CAT]
+cat = st.selectbox("What are you meta-analysing?", cat_list)
 is_nma = cat == NMA_CAT
+is_calc = cat == CALC_CAT
 
+# ===========================================================================
+# Effect-size calculator (data prep) — its own self-contained flow
+# ===========================================================================
+if is_calc:
+    st.markdown("#### Turn oddly-reported data into meta-analysis inputs")
+    cname = {c.name: c for c in EC.CONVERSIONS.values()}
+    conv = cname[st.selectbox("What do you have?", list(cname.keys()))]
+    ratio = False
+    if conv.id in ("ci_to_se", "p_to_se"):
+        ratio = st.checkbox("Ratio measure? (OR / RR / HR — compute on the log scale)", value=False)
+    st.info(conv.note)
+
+    cols_df = pd.DataFrame([(c, "Required", h) for c, h in conv.columns],
+                           columns=["Column", "Required", "What to enter"])
+    tcol, dcol = st.columns([3, 1])
+    tcol.dataframe(cols_df, hide_index=True, width="stretch")
+    dcol.download_button("⬇ Download Excel template", data=EC.template_bytes(conv),
+                         file_name=f"jarvis_escalc_{conv.id}_template.xlsx",
+                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                         width="stretch")
+    up = st.file_uploader("Upload the filled template (.xlsx / .csv)", type=["xlsx", "xls", "csv"],
+                          key=f"calc_{conv.id}")
+    use_ex = st.checkbox("Use the built-in example data instead", value=False, key=f"calcex_{conv.id}")
+    cdf = None
+    if use_ex:
+        cdf = pd.DataFrame(conv.example)
+    elif up is not None:
+        try:
+            cdf = _read(up)
+        except Exception as e:
+            st.error(f"Could not read the file: {e}")
+    if cdf is not None:
+        with st.expander("Preview data", expanded=False):
+            st.dataframe(cdf.head(30), width="stretch")
+    if st.button("🧮 Convert", type="primary", disabled=(cdf is None)):
+        problems = EC.validate(conv, cdf)
+        if problems:
+            st.error("Please fix the data:\n\n- " + "\n- ".join(problems))
+        else:
+            try:
+                out, note, poolable = EC.compute(conv.id, cdf, ratio=ratio)
+                st.success(f"Converted {len(out)} rows. {note}")
+                st.dataframe(out, hide_index=True, width="stretch")
+                st.download_button("⬇ Download result (.csv)", data=out.to_csv(index=False).encode("utf-8"),
+                                   file_name=f"jarvis_escalc_{conv.id}.csv", mime="text/csv")
+                if poolable:
+                    st.markdown("These **Effect + 95% CI** rows drop straight into the *Generic (effect + CI)* "
+                                "analysis. Here is a quick pooled forest:")
+                    res = MA.run("generic", out, model="random")
+                    st.image(res.figures["Forest plot"], caption=res.headline, width="stretch")
+                    if ratio:
+                        st.caption("Ratio note: this quick pool is on the raw scale. For proper log-scale "
+                                   "pooling, use the *Hazard ratio (from reported)* template with these values.")
+                else:
+                    st.caption("Use the **Mean + SD + N** columns in the *Mean difference* or *SMD* template "
+                               "(one arm per sheet).")
+            except Exception as e:
+                st.error(f"Could not convert: {e}")
+    st.markdown("---")
+    how_to_use([
+        ("🧭", "Pick what you have", "A 95% CI, a p-value, or medians/quartiles instead of mean ± SD."),
+        ("⬇", "Download the template", "Fill one row per study with the numbers you have."),
+        ("🧮", "Convert", "Get standard-error / mean+SD columns ready for the meta-analysis templates."),
+        ("📈", "Pool", "Effect+CI rows can be pooled right here; mean+SD rows feed MD / SMD."),
+    ])
+    st.caption("Median→mean via Luo (2018); median→SD via Wan (2014). CI→SE and p→SE on the natural "
+               "(or log) scale.")
+    st.stop()
+
+# ===========================================================================
+# Pairwise / DTA / NMA
+# ===========================================================================
 if not is_nma:
+    c1, c2, c3, c4 = st.columns([1.7, 1.5, 1.3, 0.9])
     names = {m.name: m for m in cats[cat]}
     meas = names[c1.selectbox("Effect measure", list(names.keys()))]
     is_dta = meas.id == "dta"
     columns = meas.columns
     template = MA.template_bytes(meas)
     tmpl_name = f"jarvis_meta_{meas.id}_template.xlsx"
+
+    model_opts = ["Random-effects", "Fixed-effect"]
+    if not is_dta and meas.binary:
+        model_opts.append("Mantel–Haenszel (fixed)")
+        if meas.id == "or":
+            model_opts.append("Peto (fixed)")
+    model_choice = c2.selectbox("Model", model_opts)
+    model = {"Random-effects": "random", "Fixed-effect": "fixed",
+             "Mantel–Haenszel (fixed)": "mh", "Peto (fixed)": "peto"}[model_choice]
+
+    tau_method = "DL"
+    if not is_dta:
+        tau_lbl = c3.selectbox("τ² estimator", ["DerSimonian–Laird", "REML", "Paule–Mandel"],
+                               help="Between-study variance estimator (random-effects only).")
+        tau_method = {"DerSimonian–Laird": "DL", "REML": "REML", "Paule–Mandel": "PM"}[tau_lbl]
+        hksj = c4.checkbox("Knapp–Hartung", value=False,
+                           help="Conservative CI for few studies (random-effects only).")
+    else:
+        hksj = False
+    nma_scale = "log"
 else:
-    meas = None; is_dta = False
+    meas = None; is_dta = False; tau_method = "DL"
     columns = NM.COLUMNS
     template = NM.template_bytes()
     tmpl_name = "jarvis_meta_network_template.xlsx"
+    c1, c2, c3 = st.columns([1.8, 1.3, 1.3])
     c1.caption("One row per pairwise comparison (contrast format).")
-
-model = "random" if c2.selectbox("Model", ["Random-effects", "Fixed-effect"]).startswith("Random") else "fixed"
-if is_nma:
+    model = "random" if c2.selectbox("Model", ["Random-effects", "Fixed-effect"]).startswith("Random") else "fixed"
     nma_scale = "log" if c3.selectbox("Effect scale", ["Ratio (OR/RR/HR)", "Difference (MD)"]).startswith("Ratio") else "raw"
     hksj = False
-else:
-    nma_scale = "log"
-    hksj = c3.checkbox("Knapp–Hartung", value=False, help="Conservative CI for few studies (random-effects only).")
 
 # ---- required columns + template ----
 cols_rows = [(c, "Required", h) for c, h in columns]
-if not is_nma:
+if not is_nma and not is_dta:
     cols_rows += [("Subgroup", "Optional", "Subgroup analysis + forest"),
                   ("Year", "Optional", "Cumulative meta-analysis (numeric)"),
-                  ("Moderator", "Optional", "Meta-regression + bubble (numeric)")]
+                  ("Moderator / Moderator1, Moderator2…", "Optional", "Meta-regression + bubble (numeric)")]
 cols_df = pd.DataFrame(cols_rows, columns=["Column", "Required", "What to enter"])
 tcol, dcol = st.columns([3, 1])
 tcol.dataframe(cols_df, hide_index=True, width="stretch")
@@ -79,15 +179,6 @@ st.markdown("#### Your studies")
 up = st.file_uploader("Upload the filled template (or your own .xlsx / .csv)",
                       type=["xlsx", "xls", "csv"], key=f"mup_{cat}_{'' if is_nma else meas.id}")
 use_example = st.checkbox("Use the built-in example data instead", value=False)
-
-
-def _read(file):
-    if file.name.lower().endswith(".csv"):
-        return pd.read_csv(file)
-    xls = pd.ExcelFile(file)
-    sheet = "Data" if "Data" in xls.sheet_names else xls.sheet_names[0]
-    return pd.read_excel(xls, sheet_name=sheet)
-
 
 df = None
 if use_example:
@@ -127,8 +218,8 @@ if st.button("📊 Run meta-analysis", type="primary", disabled=(df is None)):
                     res = MA.run_dta(df, model=model); r_src = MA.r_script_dta(df, model=model)
                     st.session_state["mr_rank"] = None
                 else:
-                    res = MA.run(meas.id, df, model=model, hksj=hksj)
-                    r_src = MA.r_script(meas.id, df, model=model, hksj=hksj)
+                    res = MA.run(meas.id, df, model=model, hksj=hksj, tau_method=tau_method)
+                    r_src = MA.r_script(meas.id, df, model=model, hksj=hksj, tau_method=tau_method)
                     st.session_state["mr_rank"] = None
             st.session_state["mr_res"] = res
             st.session_state["mr_key"] = cat + ("" if is_nma else meas.id)
@@ -150,7 +241,7 @@ if res is not None and st.session_state.get("mr_key") == cat + ("" if is_nma els
         st.markdown("**Ranking:**")
         st.dataframe(st.session_state["mr_rank"], hide_index=True, width="stretch")
     if res.extras:
-        st.markdown("#### Publication bias & moderators" if not is_nma else "#### Heterogeneity & ranking")
+        st.markdown("#### Publication bias & moderators" if not is_nma else "#### Heterogeneity, ranking & consistency")
         for k, v in res.extras.items():
             st.info(f"**{k}** — {v}")
     for c in res.caveats:
@@ -186,13 +277,14 @@ if res is not None and st.session_state.get("mr_key") == cat + ("" if is_nma els
 st.markdown("---")
 how_to_use([
     ("🧭", "Choose your analysis",
-     "Pairwise (OR/RR/MD/HR…), diagnostic accuracy (DTA), or network meta-analysis (NMA) of ≥3 treatments."),
+     "Pairwise (OR/RR/MD/HR…), diagnostic accuracy (DTA), network meta-analysis (NMA), or the "
+     "effect-size calculator for data prep."),
     ("⬇", "Download the Excel template",
      "Pairwise/DTA: one row per study. NMA: one row per pairwise comparison (Study, Treatment1, Treatment2, TE, seTE)."),
     ("📤", "Upload & run",
-     "Pick fixed or random-effects. NMA also asks for a reference treatment and which direction is 'better'."),
+     "Pick your model (random / fixed / Mantel–Haenszel / Peto), τ² estimator (DL / REML / PM), and options."),
     ("📈", "Export",
      "Download every figure, a full report, and an R script (metafor / meta / mada / netmeta) — or an AI read of the main figure."),
 ])
-st.caption("Pairwise: metafor. DTA: meta + mada (SROC, Deeks). Network: netmeta (league table, P-scores, "
-           "network graph). Frequentist estimation; the R exports also cover inconsistency / node-splitting.")
+st.caption("Pairwise: metafor (DL / REML / PM, HKSJ, Mantel–Haenszel, Peto). DTA: meta + mada "
+           "(bivariate/HSROC SROC, Deeks). Network: netmeta (league table, P-scores, node-splitting).")

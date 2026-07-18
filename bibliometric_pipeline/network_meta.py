@@ -77,6 +77,72 @@ def _estimate(t1, t2, TE, se, treats, ref, tau2=0.0):
     return d, cov, basics, X, Q
 
 
+def _node_split(t1, t2, TE, se, treats, ref, tau2, model):
+    """Side-/node-splitting: for every directly-compared pair, contrast the
+    DIRECT estimate against the INDIRECT estimate from the rest of the network."""
+    from collections import defaultdict
+    tadd = tau2 if model != "fixed" else 0.0
+    pairs = defaultdict(list)
+    for r, (a, b) in enumerate(zip(t1, t2)):
+        pairs[tuple(sorted((a, b)))].append(r)
+    out = []
+    for (A, B), ridx in pairs.items():
+        ridx = np.array(ridx)
+        sign = np.array([1.0 if t1[r] == A else -1.0 for r in ridx])
+        te_d = TE[ridx]*sign; wd = 1/(se[ridx]**2 + tadd)
+        dir_e = float(np.sum(wd*te_d)/np.sum(wd)); dir_se = float(np.sqrt(1/np.sum(wd)))
+        mask = np.ones(len(TE), bool); mask[ridx] = False
+        t1b, t2b, TEb, seb = t1[mask], t2[mask], TE[mask], se[mask]
+        treatsb = sorted(set(t1b) | set(t2b))
+        if len(TEb) < 1 or A not in treatsb or B not in treatsb:
+            out.append((A, B, dir_e, dir_se, None, None, None, None)); continue
+        try:
+            refb = ref if ref in treatsb else treatsb[0]
+            d2, cov2, basics2, X2, Q2 = _estimate(t1b, t2b, TEb, seb, treatsb, refb, tadd)
+            pos2 = {t: i for i, t in enumerate(basics2)}
+            ea = 0.0 if A == refb else d2[pos2[A]]
+            eb = 0.0 if B == refb else d2[pos2[B]]
+            va = 0.0 if A == refb else cov2[pos2[A], pos2[A]]
+            vb = 0.0 if B == refb else cov2[pos2[B], pos2[B]]
+            cab = 0.0 if (A == refb or B == refb) else cov2[pos2[A], pos2[B]]
+            ind_v = va + vb - 2*cab
+            if ind_v <= 0:
+                out.append((A, B, dir_e, dir_se, None, None, None, None)); continue
+            ind_e = float(ea - eb); ind_se = float(np.sqrt(ind_v))
+            diff = dir_e - ind_e; dse = np.sqrt(dir_se**2 + ind_se**2)
+            p = float(2*(1 - stats.norm.cdf(abs(diff/dse))))
+            out.append((A, B, dir_e, dir_se, ind_e, ind_se, diff, p))
+        except Exception:
+            out.append((A, B, dir_e, dir_se, None, None, None, None))
+    return out
+
+
+def _nodesplit_plot(ns, scale, disp):
+    rows = [(A, B, de, dse, ie, ise) for (A, B, de, dse, ie, ise, diff, p) in ns]
+    n = len(rows)
+    fig, ax = plt.subplots(figsize=(7.8, 1.3 + 0.62*n), dpi=200)
+    ys = np.arange(n)[::-1]
+    first = True
+    for y, (A, B, de, dse, ie, ise) in zip(ys, rows):
+        ax.plot([disp(de-Z*dse), disp(de+Z*dse)], [y+0.14, y+0.14], color="black", lw=1, zorder=2)
+        ax.scatter([disp(de)], [y+0.14], marker="s", s=72, color=STEEL, edgecolor="black", lw=0.5,
+                   zorder=3, label="Direct" if first else None)
+        if ie is not None:
+            ax.plot([disp(ie-Z*ise), disp(ie+Z*ise)], [y-0.14, y-0.14], color="black", lw=1, zorder=2)
+            ax.scatter([disp(ie)], [y-0.14], marker="o", s=72, color=ORANGE, edgecolor="black", lw=0.5,
+                       zorder=3, label="Indirect" if first else None)
+        first = False
+    refx = 1.0 if scale == "log" else 0.0
+    ax.axvline(refx, color="black", ls=":", lw=1)
+    if scale == "log": ax.set_xscale("log")
+    ax.set_yticks(ys); ax.set_yticklabels([f"{A} vs {B}" for (A, B, *_) in rows], fontsize=10)
+    ax.set_xlabel("Relative effect", fontsize=11, color=INK)
+    ax.set_title("Node-splitting: direct vs indirect", fontsize=12.5, fontweight="bold", color=INK)
+    for s in ("top", "right"): ax.spines[s].set_visible(False)
+    ax.legend(loc="best", fontsize=8, frameon=False)
+    fig.tight_layout(); return fig_to_png(fig, dpi=200)
+
+
 def run_nma(df, scale="log", model="random", reference=None, higher_better=False):
     t1 = _col(df, "Treatment1").astype(str).values
     t2 = _col(df, "Treatment2").astype(str).values
@@ -171,8 +237,31 @@ def run_nma(df, scale="log", model="random", reference=None, higher_better=False
     extras = {"Heterogeneity": f"Q = {Q:.2f} (df = {dfree}), I² = {I2:.0f}%, τ² = {tau2:.3f}",
               "Reference treatment": ref,
               "Best-ranked (P-score)": f"{best} ({pscore[best]:.2f})"}
-    caveats = ["Frequentist NMA assumes a connected, consistent network; the R export (netmeta) also "
-               "reports inconsistency (design-by-treatment / net-splitting).",
+
+    # node-splitting (direct vs indirect inconsistency)
+    ns = _node_split(t1, t2, TE, se, treats, ref, tau2, model)
+    ns_rows = []; worst = None
+    for A, B, de, dse, ie, ise, diff, p in ns:
+        if ie is None:
+            ns_rows.append({"Comparison": f"{A} vs {B}",
+                            "Direct": f"{disp(de):.2f} [{disp(de-Z*dse):.2f}, {disp(de+Z*dse):.2f}]",
+                            "Indirect": "—", "Difference": "—", "p": "—"})
+        else:
+            worst = p if worst is None else min(worst, p)
+            ns_rows.append({"Comparison": f"{A} vs {B}",
+                            "Direct": f"{disp(de):.2f} [{disp(de-Z*dse):.2f}, {disp(de+Z*dse):.2f}]",
+                            "Indirect": f"{disp(ie):.2f} [{disp(ie-Z*ise):.2f}, {disp(ie+Z*ise):.2f}]",
+                            "Difference": f"{disp(diff):.2f}", "p": f"{p:.3f}"})
+    if ns_rows:
+        figs["Node-split (direct vs indirect)"] = _nodesplit_plot(ns, scale, disp)
+    if worst is not None:
+        extras["Inconsistency (node-splitting)"] = (
+            f"smallest direct-vs-indirect p = {worst:.3f} across "
+            f"{sum(1 for r in ns if r[4] is not None)} closed loops; p < 0.05 flags disagreement.")
+
+    caveats = ["Frequentist NMA assumes a connected network. Consistency is now checked in-app by "
+               "node-splitting (direct vs indirect per comparison); the R export (netmeta) adds the "
+               "global design-by-treatment interaction test.",
                "Enter multi-arm studies as their set of pairwise contrasts (exact multi-arm correlation "
                "is handled by netmeta in the R export)."]
     return MA.MetaResult(head, {"I2": I2, "tau2": tau2, "Q": Q, "df": dfree},

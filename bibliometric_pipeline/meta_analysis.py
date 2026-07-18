@@ -193,15 +193,45 @@ _reg(Measure("generic","Generic (effect + 95% CI)","raw",
 # ---------------------------------------------------------------------------
 # pooling + heterogeneity
 # ---------------------------------------------------------------------------
-def pool(yi, vi, model="random", hksj=False):
+def _tau2(yi, vi, method="DL"):
+    """Between-study variance by DerSimonian–Laird, Paule–Mandel, or REML."""
+    yi = np.asarray(yi, float); vi = np.asarray(vi, float); k = len(yi)
+    wf = 1/vi; ybar = np.sum(wf*yi)/np.sum(wf)
+    Q = float(np.sum(wf*(yi-ybar)**2)); df = k-1
+    C = np.sum(wf) - np.sum(wf**2)/np.sum(wf)
+    dl = max(0.0, (Q-df)/C) if C > 0 else 0.0
+    if method == "DL" or k < 3:
+        return dl
+    if method == "PM":  # Paule–Mandel: weighted Q(tau2) == df
+        def Qt(t):
+            w = 1/(vi+t); mu = np.sum(w*yi)/np.sum(w); return float(np.sum(w*(yi-mu)**2)) - df
+        if Qt(0.0) <= 0: return 0.0
+        lo, hi = 0.0, max(dl*4, 1.0)
+        while Qt(hi) > 0 and hi < 1e7: hi *= 2
+        for _ in range(200):
+            mid = 0.5*(lo+hi)
+            if Qt(mid) > 0: lo = mid
+            else: hi = mid
+        return 0.5*(lo+hi)
+    if method == "REML":  # Viechtbauer fixed-point iteration
+        t = dl
+        for _ in range(400):
+            w = 1/(vi+t); s1 = np.sum(w); mu = np.sum(w*yi)/s1
+            tn = max(0.0, float(np.sum(w**2*((yi-mu)**2 - vi))/np.sum(w**2) + 1.0/s1))
+            if abs(tn-t) < 1e-9: t = tn; break
+            t = tn
+        return t
+    return dl
+
+
+def pool(yi, vi, model="random", hksj=False, tau_method="DL"):
     yi = np.asarray(yi, float); vi = np.asarray(vi, float)
     k = len(yi)
     wf = 1/vi
     ybar_f = np.sum(wf*yi)/np.sum(wf)
     Q = float(np.sum(wf*(yi-ybar_f)**2))
     df = k-1
-    C = np.sum(wf) - np.sum(wf**2)/np.sum(wf)
-    tau2 = max(0.0, (Q-df)/C) if C > 0 else 0.0
+    tau2 = _tau2(yi, vi, tau_method)
     I2 = max(0.0, (Q-df)/Q)*100 if Q > 0 else 0.0
     H2 = Q/df if df > 0 else np.nan
     if model == "fixed":
@@ -292,24 +322,40 @@ def cumulative(yi, vi, order, model="random", hksj=False):
         rows.append((idx[j-1], r["est"], r["ci"][0], r["ci"][1]))
     return rows, idx
 
-def subgroups(yi, vi, groups, model="random", hksj=False):
+def subgroups(yi, vi, groups, model="random", hksj=False, tau_method="DL"):
     res={}; Qw=0.0
     for g in pd.unique(groups):
         m = groups==g
-        r = pool(yi[m], vi[m], model, hksj); res[str(g)] = r; Qw += r["Q"]
-    total = pool(yi, vi, model, hksj)
+        r = pool(yi[m], vi[m], model, hksj, tau_method); res[str(g)] = r; Qw += r["Q"]
+    total = pool(yi, vi, model, hksj, tau_method)
     Qbet = max(0.0, total["Q"] - Qw); dfb = len(res)-1
     pbet = 1-stats.chi2.cdf(Qbet, dfb) if dfb>0 else np.nan
     return res, {"Q_between":Qbet,"df":dfb,"p":pbet}
 
-def metareg(yi, vi, x, model="random"):
-    tau2 = pool(yi, vi, model)["tau2"] if model!="fixed" else 0.0
-    w = 1/(vi+tau2); X = np.column_stack([np.ones_like(x), x])
-    W = np.diag(w)
-    XtWX = X.T@W@X; beta = np.linalg.solve(XtWX, X.T@W@yi)
-    cov = np.linalg.inv(XtWX); se = np.sqrt(np.diag(cov))
-    t = beta/se; p = 2*(1-stats.norm.cdf(np.abs(t)))
-    return {"beta":beta,"se":se,"p":p,"tau2":tau2}
+def metareg(yi, vi, X, model="random", tau_method="DL"):
+    """Meta-regression on one or more moderators (X: n or n×p). DL residual
+    heterogeneity, per-coefficient tests, omnibus QM test, and R²_analog."""
+    yi = np.asarray(yi, float); vi = np.asarray(vi, float); X = np.asarray(X, float)
+    if X.ndim == 1: X = X[:, None]
+    if X.shape[0] != len(yi): X = X.T
+    k, p = len(yi), X.shape[1]
+    Xd = np.column_stack([np.ones(k), X])
+    wf = 1/vi
+    XtWX = Xd.T @ (wf[:, None]*Xd); XtWXi = np.linalg.inv(XtWX)
+    P = np.diag(wf) - (wf[:, None]*Xd) @ XtWXi @ (Xd.T * wf)
+    QE = float(yi @ P @ yi)
+    tr = np.sum(wf) - np.trace(XtWXi @ (Xd.T @ ((wf**2)[:, None]*Xd)))
+    tau2_r = max(0.0, (QE-(k-p-1))/tr) if (model != "fixed" and tr > 0) else 0.0
+    w = 1/(vi+tau2_r)
+    XtWX2 = Xd.T @ (w[:, None]*Xd); cov = np.linalg.inv(XtWX2)
+    beta = cov @ (Xd.T @ (w*yi)); se = np.sqrt(np.diag(cov)); t = beta/se
+    pv = 2*(1-stats.norm.cdf(np.abs(t)))
+    bm, cm = beta[1:], cov[1:, 1:]
+    QM = float(bm @ np.linalg.solve(cm, bm)); QMp = 1-stats.chi2.cdf(QM, p)
+    tau0 = _tau2(yi, vi, tau_method)
+    R2 = max(0.0, (tau0-tau2_r)/tau0)*100 if tau0 > 0 else 0.0
+    return {"beta": beta, "se": se, "p": pv, "tau2_resid": tau2_r, "QM": QM, "QMp": QMp,
+            "R2": R2, "p_mod": p}
 
 
 # ---------------------------------------------------------------------------
@@ -361,19 +407,33 @@ def forest_plot(labels, yi, vi, res, scale, mname, title="", pooled_label="Poole
     fig.tight_layout(); _wm(fig); return fig_to_png(fig, dpi=200)
 
 def funnel_plot(yi, vi, res, scale, mname):
-    sei = np.sqrt(vi); est = res["est"]
-    fig, ax = plt.subplots(figsize=(7, 5.3), dpi=200)
-    ys = np.linspace(1e-6, sei.max()*1.1, 60)
-    loL = disp(scale, est - Z*ys); hiL = disp(scale, est + Z*ys)
-    ax.fill_betweenx(ys, loL, hiL, color="#eaf2fb", zorder=0)     # 95% pseudo-CI region
-    ax.plot(loL, ys, color=GREY, ls="--", lw=1); ax.plot(hiL, ys, color=GREY, ls="--", lw=1)
-    ax.axvline(disp(scale, est), color=SUB, lw=1.2, zorder=1)
-    ax.scatter(disp(scale, yi), sei, s=60, facecolor=STEEL, edgecolor="black", lw=0.6, zorder=3)
+    """Contour-enhanced funnel: significance contours around the null (grey bands)
+    plus the pooled 95% pseudo-CI funnel — helps tell publication bias from
+    heterogeneity (matches metafor::funnel with shaded contours)."""
+    from matplotlib.patches import Patch
+    sei = np.sqrt(vi); est = res["est"]; null = 0.0
+    fig, ax = plt.subplots(figsize=(7.2, 5.4), dpi=200)
+    ys = np.linspace(1e-6, sei.max()*1.15, 90)
+    def X(z):
+        return disp(scale, null - z*ys), disp(scale, null + z*ys)
+    l1, r1 = X(1.645); l2, r2 = X(1.96); l3, r3 = X(2.576)
+    for a, b in [(l2, l1), (r1, r2)]:  # 0.05 < p < 0.10
+        ax.fill_betweenx(ys, a, b, color="#c9d3dd", zorder=0)
+    for a, b in [(l3, l2), (r2, r3)]:  # 0.01 < p < 0.05
+        ax.fill_betweenx(ys, a, b, color="#e6ecf2", zorder=0)
+    ax.axvline(disp(scale, null), color=GREY, ls="--", lw=1, zorder=1)          # null
+    ax.axvline(disp(scale, est), color=SUB, lw=1.3, zorder=1)                   # pooled
+    ax.plot(disp(scale, est-Z*ys), ys, color=SUB, ls=":", lw=1, zorder=1)
+    ax.plot(disp(scale, est+Z*ys), ys, color=SUB, ls=":", lw=1, zorder=1)
+    ax.scatter(disp(scale, yi), sei, s=62, facecolor=STEEL, edgecolor="black", lw=0.6, zorder=3)
     if scale == "log": ax.set_xscale("log")
     ax.invert_yaxis()
     ax.set_xlabel(_short(scale, mname), fontsize=11, color=INK)
     ax.set_ylabel("Standard error", fontsize=11, color=INK)
-    ax.set_title("Funnel plot", fontsize=12.5, fontweight="bold", color=INK)
+    ax.set_title("Contour-enhanced funnel plot", fontsize=12.5, fontweight="bold", color=INK)
+    ax.legend(handles=[Patch(facecolor="#c9d3dd", label="0.05 < p < 0.10"),
+                       Patch(facecolor="#e6ecf2", label="0.01 < p < 0.05")],
+              loc="lower right", fontsize=8, frameon=False)
     for s in ("top", "right"): ax.spines[s].set_visible(False)
     fig.tight_layout(); _wm(fig); return fig_to_png(fig, dpi=200)
 
@@ -488,17 +548,56 @@ class MetaResult:
 def _fmt(scale, x):
     return f"{disp(scale, x):.3f}"
 
-def run(measure_id, df, model="random", hksj=False):
+_TAU_LABEL = {"DL": "DL", "REML": "REML", "PM": "Paule–Mandel"}
+
+def _2x2(df):
+    a = _num(_col(df, "Events1")).values.astype(float); n1 = _num(_col(df, "N1")).values.astype(float)
+    c = _num(_col(df, "Events2")).values.astype(float); n2 = _num(_col(df, "N2")).values.astype(float)
+    return a, n1 - a, c, n2 - c   # a, b, c, d
+
+def mh_pool(df, measure):
+    """Mantel–Haenszel pooled OR/RR (log scale) with Robins–Breslow–Greenland SE."""
+    a, b, c, d = _2x2(df); n = a + b + c + d
+    if measure == "rr":
+        R = np.sum(a*(c+d)/n); S = np.sum(c*(a+b)/n); est = np.log(R/S)
+        var = np.sum(((a+b)*(c+d)*(a+c) - a*c*n)/n**2)/(R*S)
+    else:  # OR
+        R = np.sum(a*d/n); S = np.sum(b*c/n); est = np.log(R/S)
+        PR = (a+d)/n; PS = (b+c)/n
+        var = (np.sum(PR*a*d/n)/(2*R**2)
+               + np.sum(PR*b*c/n + PS*a*d/n)/(2*R*S)
+               + np.sum(PS*b*c/n)/(2*S**2))
+    return float(est), float(np.sqrt(var))
+
+def peto_pool(df):
+    """Peto one-step pooled log OR (fixed-effect, best for rare events / balanced arms)."""
+    a, b, c, d = _2x2(df); n = a + b + c + d
+    E = (a+b)*(a+c)/n
+    V = (a+b)*(c+d)*(a+c)*(b+d)/(n**2*(n-1))
+    est = np.sum(a - E)/np.sum(V); var = 1/np.sum(V)
+    return float(est), float(np.sqrt(var))
+
+def run(measure_id, df, model="random", hksj=False, tau_method="DL"):
     meas = MEASURES[measure_id]
     labels, yi, vi, extra = meas.compute(df)
     labels = list(labels); yi = np.asarray(yi, float); vi = np.asarray(vi, float)
     ok = np.isfinite(yi) & np.isfinite(vi) & (vi > 0)
     labels = [l for l, o in zip(labels, ok) if o]; yi, vi = yi[ok], vi[ok]
     df = df.loc[ok].reset_index(drop=True)
-    r = pool(yi, vi, model, hksj)
+    binary_method = model if model in ("mh", "peto") else None
+    pool_model = "fixed" if binary_method else model
+    r = pool(yi, vi, pool_model, hksj, tau_method)
+    if binary_method:
+        est, se = (peto_pool(df) if binary_method == "peto" else mh_pool(df, meas.id))
+        r["est"], r["se"], r["ci"] = est, se, (est - Z*se, est + Z*se)
+        r["p"] = 2*(1 - stats.norm.cdf(abs(est/se))); r["pi"] = (np.nan, np.nan)
     sc = meas.scale
     est_s, lo_s, hi_s = _fmt(sc, r["est"]), _fmt(sc, r["ci"][0]), _fmt(sc, r["ci"][1])
-    mlab = "random-effects (DL" + (", HKSJ" if hksj else "") + ")" if model != "fixed" else "fixed-effect"
+    if binary_method:
+        mlab = ("Peto (fixed-effect)" if binary_method == "peto" else "Mantel–Haenszel (fixed-effect)")
+    else:
+        mlab = ("random-effects (" + _TAU_LABEL.get(tau_method, "DL") + (", HKSJ" if hksj else "") + ")"
+                if model != "fixed" else "fixed-effect")
     head = f"{meas.name}: pooled {est_s} [{lo_s}, {hi_s}], {mlab}, k = {r['k']}, I² = {r['I2']:.0f}%"
     # per-study table
     sei = np.sqrt(vi)
@@ -513,7 +612,9 @@ def run(measure_id, df, model="random", hksj=False):
               f"(95% CI {lo_s} to {hi_s}, p = {r['p']:.3f}). Heterogeneity: I² = {r['I2']:.0f}% "
               f"(τ² = {r['tau2']:.3f}, Q p = {r['Qp']:.3f}).{pi}")
 
-    figs = {"Forest plot": forest_plot(labels, yi, vi, r, sc, meas.name, pooled_label="Pooled ("+("RE" if model!="fixed" else "FE")+")")}
+    _plab = "Peto" if binary_method == "peto" else ("MH" if binary_method == "mh"
+             else ("RE" if model != "fixed" else "FE"))
+    figs = {"Forest plot": forest_plot(labels, yi, vi, r, sc, meas.name, pooled_label="Pooled ("+_plab+")")}
     if r["k"] >= 3:
         figs["Funnel plot"] = funnel_plot(yi, vi, r, sc, meas.name)
         figs["Radial plot"] = radial_plot(yi, vi)
@@ -537,7 +638,7 @@ def run(measure_id, df, model="random", hksj=False):
     # subgroup
     g = _col(df, "Subgroup")
     if g is not None and g.notna().any() and g.nunique() >= 2:
-        sub, qb = subgroups(yi, vi, g.astype(str).values, model, hksj)
+        sub, qb = subgroups(yi, vi, g.astype(str).values, model, hksj, tau_method)
         rows = [{"Subgroup": k2, "Pooled": _fmt(sc, v["est"]),
                  "95% CI": f"[{_fmt(sc,v['ci'][0])}, {_fmt(sc,v['ci'][1])}]",
                  "k": v["k"], "I²": f"{v['I2']:.0f}%"} for k2, v in sub.items()]
@@ -553,33 +654,88 @@ def run(measure_id, df, model="random", hksj=False):
         crows, oidx = cumulative(yi, vi, _num(oc).values, model, hksj)
         figs["Cumulative"] = _cumulative_forest(labels, crows, oidx, sc)
 
-    # meta-regression (needs Moderator)
-    mod = _col(df, "Moderator")
-    if mod is not None and _num(mod).notna().all() and r["k"] >= 4:
-        reg = metareg(yi, vi, _num(mod).values, model)
-        extras["Meta-regression slope"] = f"β = {reg['beta'][1]:.3f} (SE {reg['se'][1]:.3f}, p = {reg['p'][1]:.3f})"
-        figs["Meta-regression"] = bubble_plot(_num(mod).values, yi, vi, reg, sc, "Moderator")
+    # meta-regression (needs Moderator, Moderator1, Moderator2, …)
+    mod_names = [c for c in df.columns if _re.fullmatch(r"(?i)moderator\d*", str(c).strip())]
+    Xcols, used = [], []
+    for c in mod_names:
+        v = _num(df[c])
+        if v.notna().all():
+            Xcols.append(v.values); used.append(str(c))
+    if used and r["k"] >= len(used) + 3:
+        reg = metareg(yi, vi, np.column_stack(Xcols), model, tau_method)
+        for j, c in enumerate(used):
+            extras[f"Meta-regression: {c}"] = (f"β = {reg['beta'][j+1]:.3f} "
+                                               f"(SE {reg['se'][j+1]:.3f}, p = {reg['p'][j+1]:.3f})")
+        if len(used) > 1:
+            extras["Meta-regression (omnibus)"] = (f"QM({reg['p_mod']}) = {reg['QM']:.2f}, "
+                                                   f"p = {reg['QMp']:.3f}; R² = {reg['R2']:.0f}%, "
+                                                   f"residual τ² = {reg['tau2_resid']:.3f}")
+            figs["Meta-regression"] = _coef_plot(reg, used)
+        else:
+            extras["Meta-regression: R²"] = (f"{reg['R2']:.0f}% of between-study variance explained; "
+                                             f"residual τ² = {reg['tau2_resid']:.3f}")
+            figs["Meta-regression"] = bubble_plot(Xcols[0], yi, vi, reg, sc, used[0])
 
     return MetaResult(head, r, tab, interp, figs, extras, caveats)
+
+
+def _coef_plot(reg, names):
+    """Coefficient (forest-style) plot for multi-moderator meta-regression."""
+    b = reg["beta"][1:]; se = reg["se"][1:]
+    lo, hi = b - Z*se, b + Z*se
+    n = len(names)
+    fig, ax = plt.subplots(figsize=(7.4, 1.1 + 0.5*n), dpi=200)
+    ys = np.arange(n)[::-1]
+    for y, e, l, h in zip(ys, b, lo, hi):
+        ax.plot([l, h], [y, y], color="black", lw=1.2, zorder=2)
+        ax.scatter([e], [y], marker="s", s=90, color=STEEL, edgecolor="black", lw=0.6, zorder=3)
+    ax.axvline(0, color="black", ls=":", lw=1)
+    ax.set_yticks(ys); ax.set_yticklabels(names, fontsize=10)
+    ax.set_xlabel("Regression coefficient (β, effect scale)", fontsize=11, color=INK)
+    ax.set_title("Meta-regression coefficients", fontsize=12.5, fontweight="bold", color=INK)
+    for s in ("top", "right"): ax.spines[s].set_visible(False)
+    fig.tight_layout(); _wm(fig); return fig_to_png(fig, dpi=200)
 
 
 # ---------------------------------------------------------------------------
 # metafor R export  (embed yi/vi -> rma; authoritative + matches our numbers)
 # ---------------------------------------------------------------------------
-def r_script(measure_id, df, model="random", hksj=False):
+def r_script(measure_id, df, model="random", hksj=False, tau_method="DL"):
     from .r_export import df_to_r, _header
     meas = MEASURES[measure_id]
+    if model in ("mh", "peto") and meas.binary:
+        a, b, c, d = _2x2(df)
+        okm = np.isfinite(a) & np.isfinite(b) & np.isfinite(c) & np.isfinite(d)
+        lb = _labels(df)
+        dat = pd.DataFrame({"study": [str(l) for l, o in zip(lb, okm) if o],
+                            "ai": a[okm].astype(int), "bi": b[okm].astype(int),
+                            "ci": c[okm].astype(int), "di": d[okm].astype(int)})
+        if model == "peto":
+            call = 'res <- rma.peto(ai=ai, bi=bi, ci=ci, di=di, data=dat, slab=study)'
+        else:
+            mm = "RR" if meas.id == "rr" else "OR"
+            call = f'res <- rma.mh(ai=ai, bi=bi, ci=ci, di=di, data=dat, measure="{mm}", slab=study)'
+        lines = [_header(f"Meta-analysis — {meas.name} ({'Peto' if model=='peto' else 'Mantel–Haenszel'})",
+                         ["metafor"]), df_to_r(dat, "dat"), "", call,
+                 "print(summary(res))", "forest(res, atransf=exp, header=TRUE)", "funnel(res)"]
+        return "\n".join(lines) + "\n"
     labels, yi, vi, extra = meas.compute(df)
     ok = np.isfinite(yi) & np.isfinite(vi) & (vi > 0)
     dat = pd.DataFrame({"study": [str(l) for l, o in zip(labels, ok) if o],
                         "yi": np.round(np.asarray(yi)[ok], 6), "vi": np.round(np.asarray(vi)[ok], 8)})
-    sub = _col(df, "Subgroup"); mod = _col(df, "Moderator"); yr = _col(df, "Year")
+    sub = _col(df, "Subgroup"); yr = _col(df, "Year")
+    mod_names = [c for c in df.columns if _re.fullmatch(r"(?i)moderator\d*", str(c).strip())]
+    mod_r = []
+    for i, c in enumerate(mod_names):
+        v = _num(df[c])
+        if v.notna().all():
+            rn = "moderator" if len(mod_names) == 1 else f"mod{i+1}"
+            dat[rn] = [x for x, o in zip(v, ok) if o]; mod_r.append(rn)
     if sub is not None: dat["subgroup"] = [str(x) for x, o in zip(sub, ok) if o]
-    if mod is not None: dat["moderator"] = [x for x, o in zip(_num(mod), ok) if o]
     if yr is not None: dat["year"] = [x for x, o in zip(_num(yr), ok) if o]
     atr = {"log": "exp", "z": "transf.ztor", "logit": "transf.ilogit"}.get(meas.scale, "")
     atr_arg = f", atransf={atr}" if atr else ""
-    method = "FE" if model == "fixed" else "DL"
+    method = "FE" if model == "fixed" else {"DL": "DL", "REML": "REML", "PM": "PM"}.get(tau_method, "DL")
     test = ', test="knha"' if (hksj and model != "fixed") else ""
     lines = [_header(f"Meta-analysis — {meas.name}", ["metafor"]), df_to_r(dat, "dat"), "",
         f'res <- rma(yi, vi, data = dat, method = "{method}"{test})',
@@ -597,8 +753,11 @@ def r_script(measure_id, df, model="random", hksj=False):
         lines.append('# labbe(res)  # needs an rma from escalc(ai,bi,ci,di) — see metafor::labbe')
     if sub is not None:
         lines.append('rma(yi, vi, mods = ~ factor(subgroup), data = dat, method = "%s")  # subgroup / moderator' % method)
-    if mod is not None:
-        lines.append('reg <- rma(yi, vi, mods = ~ moderator, data = dat, method = "%s"); print(reg); regplot(reg)' % method)
+    if mod_r:
+        rhs = " + ".join(mod_r)
+        lines.append(f'reg <- rma(yi, vi, mods = ~ {rhs}, data = dat, method = "{method}"); print(reg)')
+        if len(mod_r) == 1:
+            lines.append("regplot(reg)")
     if yr is not None:
         lines.append("print(cumul(rma(yi, vi, data = dat[order(dat$year), ], method = \"%s\")))" % method)
     return "\n".join(lines) + "\n"
@@ -647,11 +806,11 @@ def _short(scale, mname):
     return m.group(1) if m else mname
 
 def _forest(rows, scale, xlab, col_label, title="", pooled=None, het=None,
-            refx=None, xlim=None, xticks=None, weight_col=True):
+            refx=None, xlim=None, xticks=None, weight_col=True, pi=None):
     """rows: list of dict(label, e, lo, hi, w). pooled: dict(label,e,lo,hi) or None."""
     nrow = len(rows)
     row_h = 0.34
-    fig_h = 1.6 + row_h*(nrow + (1.4 if pooled else 0))
+    fig_h = 1.6 + row_h*(nrow + (2.0 if pooled else 0))
     fig = plt.figure(figsize=(11, fig_h), dpi=200)
     bottom = 0.85/fig_h; top = 0.55/fig_h
     ax = fig.add_axes([0.38, bottom, 0.27, 1-bottom-top])
@@ -671,6 +830,11 @@ def _forest(rows, scale, xlab, col_label, title="", pooled=None, het=None,
         ax.add_patch(Polygon([(pooled["lo"], ydia), (pooled["e"], ydia+0.32),
                               (pooled["hi"], ydia), (pooled["e"], ydia-0.32)],
                              closed=True, facecolor=ORANGE, edgecolor="black", lw=0.8, zorder=4))
+    ypi = ydia - 0.62
+    if pooled and pi is not None and np.isfinite(pi[0]):
+        ax.plot([pi[0], pi[1]], [ypi, ypi], color=ORANGE, lw=1.7, zorder=3, solid_capstyle="round")
+        for xx in pi:
+            ax.plot([xx, xx], [ypi-0.13, ypi+0.13], color=ORANGE, lw=1.4, zorder=3)
     if logx:
         ax.set_xscale("log")
         from matplotlib.ticker import FixedLocator, NullLocator, FuncFormatter
@@ -683,7 +847,7 @@ def _forest(rows, scale, xlab, col_label, title="", pooled=None, het=None,
     else:
         if xlim: ax.set_xlim(*xlim)
         if xticks is not None: ax.set_xticks(xticks)
-    ax.set_ylim(ydia-0.9, nrow-0.4)
+    ax.set_ylim(ydia-1.05, nrow-0.4)
     ax.set_yticks([]); ax.set_xlabel(xlab, fontsize=11, color=INK)
     for sp in ("top", "right", "left"): ax.spines[sp].set_visible(False)
     ax.tick_params(labelsize=10)
@@ -705,6 +869,10 @@ def _forest(rows, scale, xlab, col_label, title="", pooled=None, het=None,
         fig.text(xC, yy, f"[{pooled['lo']:.2f}; {pooled['hi']:.2f}]", ha="left", va="center", fontsize=10.5, fontweight="bold", color=INK)
         if weight_col:
             fig.text(xW, yy, "100.0%", ha="right", va="center", fontsize=10.5, fontweight="bold", color=INK)
+    if pooled and pi is not None and np.isfinite(pi[0]):
+        yp = fy(ypi)
+        fig.text(xL, yp, "95% prediction interval", ha="left", va="center", fontsize=9.5, style="italic", color="#B26A12")
+        fig.text(xC, yp, f"[{pi[0]:.2f}; {pi[1]:.2f}]", ha="left", va="center", fontsize=9.5, style="italic", color="#B26A12")
     # header
     yh = fy(nrow-0.4) + 0.012
     fig.text(xL, yh, "Study", ha="left", va="bottom", fontsize=11, fontweight="bold", color=INK)
@@ -713,7 +881,8 @@ def _forest(rows, scale, xlab, col_label, title="", pooled=None, het=None,
     if weight_col:
         fig.text(xW, yh, "Weight", ha="right", va="bottom", fontsize=11, fontweight="bold", color=INK)
     if het:
-        fig.text(xL, fy(ydia)-0.055, het, ha="left", va="top", fontsize=9, color=SUB)
+        hy = fy(ypi)-0.05 if (pooled and pi is not None and np.isfinite(pi[0])) else fy(ydia)-0.055
+        fig.text(xL, hy, het, ha="left", va="top", fontsize=9, color=SUB)
     if title:
         fig.text(xL, 0.985, title, ha="left", va="top", fontsize=12.5, fontweight="bold", color=INK)
     _wm(fig); return fig_to_png(fig, dpi=200)
@@ -735,12 +904,15 @@ def forest_plot(labels, yi, vi, res, scale, mname, title="", pooled_label=None,
     pe, pl, ph = disp(scale, res["est"]), disp(scale, res["ci"][0]), disp(scale, res["ci"][1])
     plab = pooled_label or ("Random effects model" if res.get("model") != "fixed" else "Fixed effect model")
     pooled = {"label": plab, "e": pe, "lo": pl, "hi": ph}
+    pi = None
+    if res.get("pi") is not None and np.isfinite(res["pi"][0]) and res.get("model") != "fixed":
+        pi = (disp(scale, res["pi"][0]), disp(scale, res["pi"][1]))
     if scale == "log": refx, xlim, xticks = 1.0, None, None
     elif scale == "raw": refx, xlim, xticks = 0.0, None, None
     elif scale == "logit": refx, xlim, xticks = pe, (0, 1), np.arange(0, 1.01, 0.2)
     else: refx, xlim, xticks = pe, (-1, 1), np.arange(-1, 1.01, 0.5)
     return _forest(rows, scale, xlab or _short(scale, mname), col_label or _short(scale, mname),
-                   title=title, pooled=pooled, het=_het_str(res), refx=refx, xlim=xlim, xticks=xticks)
+                   title=title, pooled=pooled, het=_het_str(res), refx=refx, xlim=xlim, xticks=xticks, pi=pi)
 
 
 def _loo_forest(labels, rows_in, res, scale):
