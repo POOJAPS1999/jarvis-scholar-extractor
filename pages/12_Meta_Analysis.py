@@ -46,12 +46,117 @@ def _read(file):
 NMA_CAT = "Network meta-analysis"
 CALC_CAT = "Effect-size calculator (data prep)"
 PRISMA_CAT = "PRISMA 2020 flow diagram"
+ROB_CAT = "Risk of bias (traffic light)"
 cats = MA.by_category()
-cat_list = list(cats.keys()) + [NMA_CAT, CALC_CAT, PRISMA_CAT]
+cat_list = list(cats.keys()) + [NMA_CAT, CALC_CAT, PRISMA_CAT, ROB_CAT]
 cat = st.selectbox("What are you meta-analysing?", cat_list)
 is_nma = cat == NMA_CAT
 is_calc = cat == CALC_CAT
 is_prisma = cat == PRISMA_CAT
+is_rob = cat == ROB_CAT
+
+# ===========================================================================
+# Risk-of-bias traffic light (QUADAS-2 / RoB 2 / ROBINS-I) — self-contained
+# ===========================================================================
+if is_rob:
+    import io as _io
+    from bibliometric_pipeline import plot_studio as PS
+    from bibliometric_pipeline import r_export as RX
+
+    st.markdown("#### Risk-of-bias traffic light")
+    st.caption("QUADAS-2 / RoB 2 / ROBINS-I quality-assessment grid. Low / Unclear (Some concerns) / "
+               "High → green / amber / red. QUADAS-2 uses a Panel column for 'Risk of bias' + "
+               "'Applicability concerns'.")
+
+    def _rob_example(tool):
+        studies = ["Combaret 2002", "Chicard 2018", "Yagyu 2016", "Van Paemel 2022", "Ma 2016"]
+        cyc = ["Low", "Unclear", "High", "Low", "Low", "Unclear", "Low", "High"]
+        rows, k = [], 0
+        if tool.startswith("QUADAS"):
+            rob = ["Patient selection", "Index test", "Reference standard", "Flow and timing"]
+            app = ["Patient selection", "Index test", "Reference standard"]
+            for s in studies:
+                for dm in rob:
+                    rows.append({"Study": s, "Panel": "Risk of bias", "Domain": dm,
+                                 "Judgement": cyc[k % len(cyc)]}); k += 1
+                for dm in app:
+                    rows.append({"Study": s, "Panel": "Applicability concerns", "Domain": dm,
+                                 "Judgement": cyc[(k + 3) % len(cyc)]}); k += 1
+        else:
+            if tool.startswith("RoB 2"):
+                doms = ["Randomisation process", "Deviations from interventions", "Missing outcome data",
+                        "Measurement of the outcome", "Selection of the reported result", "Overall"]
+            else:
+                doms = ["Confounding", "Selection of participants", "Classification of interventions",
+                        "Deviations from interventions", "Missing data", "Measurement of outcomes",
+                        "Selection of reported result", "Overall"]
+            for s in studies:
+                for dm in doms:
+                    rows.append({"Study": s, "Domain": dm, "Judgement": cyc[k % len(cyc)]}); k += 1
+        return pd.DataFrame(rows)
+
+    tool = st.selectbox("Assessment tool", ["QUADAS-2 (diagnostic accuracy)", "RoB 2 (randomised trials)",
+                                            "ROBINS-I (non-randomised)"])
+    ex = _rob_example(tool)
+
+    def _tmpl(dfx):
+        buf = _io.BytesIO()
+        with pd.ExcelWriter(buf, engine="openpyxl") as xl:
+            dfx.to_excel(xl, sheet_name="Data", index=False)
+        return buf.getvalue()
+
+    tcol, dcol = st.columns([3, 1])
+    tcol.caption("Columns: **Study**, **Domain**, **Judgement** (Low / Unclear / High)"
+                 + (", **Panel**" if tool.startswith("QUADAS") else "") + ". One row per study × domain.")
+    dcol.download_button("⬇ Download template", data=_tmpl(ex), file_name="jarvis_rob_template.xlsx",
+                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch")
+
+    up = st.file_uploader("Upload your filled table (.xlsx / .csv)", type=["xlsx", "xls", "csv"], key="rob_up")
+    use_ex = st.checkbox("Use the built-in example instead", value=False, key="rob_ex")
+    rdf = None
+    if use_ex:
+        rdf = ex
+    elif up is not None:
+        try:
+            rdf = _read(up)
+        except Exception as e:
+            st.error(f"Could not read the file: {e}")
+    if rdf is not None:
+        with st.expander("Preview data", expanded=False):
+            st.dataframe(rdf.head(40), width="stretch")
+
+    if st.button("🚦 Build traffic-light plot", type="primary", disabled=(rdf is None)):
+        have = {str(c).strip().lower() for c in rdf.columns}
+        miss = [c for c in ("Study", "Domain", "Judgement") if c.lower() not in have]
+        if miss:
+            st.error("Missing required columns: " + ", ".join(miss))
+        else:
+            try:
+                with jarvis_spinner("Drawing the traffic light…"):
+                    spec = PS.REGISTRY["rob_traffic"]
+                    fig = spec.render(rdf, PS.PlotOptions())
+                    st.session_state["rob_png"] = PS.fig_to_png(fig, dpi=200)
+                    st.session_state["rob_r"] = RX.plot_r_script(spec, rdf)
+            except Exception as e:
+                st.error(f"Could not build the plot: {e}")
+
+    if st.session_state.get("rob_png"):
+        st.image(st.session_state["rob_png"], width="stretch")
+        r1, r2 = st.columns(2)
+        r1.download_button("⬇ Traffic-light plot (PNG)", data=st.session_state["rob_png"],
+                           file_name="risk_of_bias.png", mime="image/png", width="stretch")
+        r2.download_button("⬇ R script (ggplot / robvis-style)", data=st.session_state["rob_r"].encode("utf-8"),
+                           file_name="risk_of_bias.R", mime="text/plain", width="stretch")
+    st.markdown("---")
+    how_to_use([
+        ("🧭", "Pick your tool", "QUADAS-2 (diagnostic accuracy), RoB 2 (RCTs), or ROBINS-I (non-randomised)."),
+        ("⬇", "Download the template", "One row per study × domain; enter Low / Unclear / High per cell."),
+        ("🚦", "Build", "Get the bordered traffic-light grid — QUADAS-2 renders both panels side by side."),
+        ("⬇", "Export", "High-res PNG for your manuscript, or a ggplot / robvis-style R script."),
+    ])
+    st.caption("Same engine as the Plot Studio's traffic-light plot; QUADAS-2 pairs naturally with the "
+               "DTA meta-analysis in this module.")
+    st.stop()
 
 # ===========================================================================
 # PRISMA 2020 flow diagram — self-contained form flow
