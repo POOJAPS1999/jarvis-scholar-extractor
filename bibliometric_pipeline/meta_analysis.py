@@ -362,27 +362,33 @@ def forest_plot(labels, yi, vi, res, scale, mname, title="", pooled_label="Poole
 
 def funnel_plot(yi, vi, res, scale, mname):
     sei = np.sqrt(vi); est = res["est"]
-    fig, ax = plt.subplots(figsize=(7, 5), dpi=200)
-    se_max = sei.max()*1.05
-    ys = np.linspace(0, se_max, 50)
-    ax.plot(est + Z*ys, ys, color=GREY, ls="--"); ax.plot(est - Z*ys, ys, color=GREY, ls="--")
-    ax.axvline(est, color=RED, lw=1.3)
-    ax.scatter(yi, sei, s=45, color=BLUE, alpha=0.8, edgecolor="white", zorder=3)
-    ax.invert_yaxis(); ax.set_xlabel(scale_label(scale, mname), fontsize=10, color=SUB)
-    ax.set_ylabel("Standard error", fontsize=10, color=SUB)
-    ax.set_title("Funnel plot", fontsize=12, fontweight="bold", color=INK)
+    fig, ax = plt.subplots(figsize=(7, 5.3), dpi=200)
+    ys = np.linspace(1e-6, sei.max()*1.1, 60)
+    loL = disp(scale, est - Z*ys); hiL = disp(scale, est + Z*ys)
+    ax.fill_betweenx(ys, loL, hiL, color="#eaf2fb", zorder=0)     # 95% pseudo-CI region
+    ax.plot(loL, ys, color=GREY, ls="--", lw=1); ax.plot(hiL, ys, color=GREY, ls="--", lw=1)
+    ax.axvline(disp(scale, est), color=SUB, lw=1.2, zorder=1)
+    ax.scatter(disp(scale, yi), sei, s=60, facecolor=STEEL, edgecolor="black", lw=0.6, zorder=3)
+    if scale == "log": ax.set_xscale("log")
+    ax.invert_yaxis()
+    ax.set_xlabel(_short(scale, mname), fontsize=11, color=INK)
+    ax.set_ylabel("Standard error", fontsize=11, color=INK)
+    ax.set_title("Funnel plot", fontsize=12.5, fontweight="bold", color=INK)
     for s in ("top", "right"): ax.spines[s].set_visible(False)
     fig.tight_layout(); _wm(fig); return fig_to_png(fig, dpi=200)
 
 def radial_plot(yi, vi):
     sei = np.sqrt(vi); x = 1/sei; y = yi/sei
     b = np.sum(x*y)/np.sum(x*x)
-    fig, ax = plt.subplots(figsize=(7, 5), dpi=200)
-    ax.scatter(x, y, s=45, color=BLUE, alpha=0.8, edgecolor="white", zorder=3)
-    xs = np.linspace(0, x.max()*1.05, 20)
-    ax.plot(xs, b*xs, color=RED); ax.plot(xs, b*xs+2, color=GREY, ls="--"); ax.plot(xs, b*xs-2, color=GREY, ls="--")
-    ax.set_xlabel("Precision (1/SE)", fontsize=10, color=SUB); ax.set_ylabel("Std. effect (z)", fontsize=10, color=SUB)
-    ax.set_title("Radial (Galbraith) plot", fontsize=12, fontweight="bold", color=INK)
+    fig, ax = plt.subplots(figsize=(7, 5.3), dpi=200)
+    xs = np.linspace(0, x.max()*1.08, 40)
+    ax.fill_between(xs, b*xs-1.96, b*xs+1.96, color="#eaf2fb", zorder=0)
+    ax.plot(xs, b*xs, color=RED, lw=1.6); ax.plot(xs, b*xs+1.96, color=GREY, ls="--", lw=1)
+    ax.plot(xs, b*xs-1.96, color=GREY, ls="--", lw=1)
+    ax.scatter(x, y, s=60, facecolor=STEEL, edgecolor="black", lw=0.6, zorder=3)
+    ax.set_xlabel("Precision (1 / SE)", fontsize=11, color=INK)
+    ax.set_ylabel("Standardized effect (z-score)", fontsize=11, color=INK)
+    ax.set_title("Radial (Galbraith) plot", fontsize=12.5, fontweight="bold", color=INK)
     for s in ("top", "right"): ax.spines[s].set_visible(False)
     fig.tight_layout(); _wm(fig); return fig_to_png(fig, dpi=200)
 
@@ -394,13 +400,13 @@ def baujat_plot(labels, yi, vi):
         m = np.ones(len(yi), bool); m[i] = False
         infl.append((full["est"]-pool(yi[m], vi[m], "fixed")["est"])**2/full["se"]**2)
     infl = np.array(infl)
-    fig, ax = plt.subplots(figsize=(7, 5), dpi=200)
-    ax.scatter(contrib, infl, s=45, color=BLUE, alpha=0.85, edgecolor="white")
+    fig, ax = plt.subplots(figsize=(7, 5.3), dpi=200)
+    ax.scatter(contrib, infl, s=62, facecolor=STEEL, edgecolor="black", lw=0.6, zorder=3)
     for xi, yi2, lab in zip(contrib, infl, labels):
-        ax.annotate(str(lab), (xi, yi2), fontsize=8, color=SUB, xytext=(3, 2), textcoords="offset points")
-    ax.set_xlabel("Contribution to heterogeneity", fontsize=10, color=SUB)
-    ax.set_ylabel("Influence on pooled result", fontsize=10, color=SUB)
-    ax.set_title("Baujat plot", fontsize=12, fontweight="bold", color=INK)
+        ax.annotate(str(lab), (xi, yi2), fontsize=8.5, color=INK, xytext=(4, 3), textcoords="offset points")
+    ax.set_xlabel("Contribution to overall heterogeneity", fontsize=11, color=INK)
+    ax.set_ylabel("Influence on pooled result", fontsize=11, color=INK)
+    ax.set_title("Baujat plot", fontsize=12.5, fontweight="bold", color=INK)
     for s in ("top", "right"): ax.spines[s].set_visible(False)
     fig.tight_layout(); _wm(fig); return fig_to_png(fig, dpi=200)
 
