@@ -1879,3 +1879,42 @@ register(PlotSpec("drapery_meta", "Drapery plot", _CAT8,
 register(PlotSpec("gosh_meta", "GOSH plot", _CAT8,
     "Graphical display of study heterogeneity: pooled effect vs I² across many study subsets (spots outliers/clusters).",
     _META_EC_COLS, _META_EC_EX, rm_gosh))
+
+
+def _nma_fig(df, which):
+    from . import network_meta as NM
+    res, rank, ref = NM.run_nma(df, scale="log", model="random", reference=None, higher_better=False)
+    for name, png in res.figures.items():
+        if which.lower() in name.lower():
+            return png
+    return next(iter(res.figures.values()))
+
+def rm_nma_network(df, opt):   return _nma_fig(df, "network graph")
+def rm_nma_forest(df, opt):    return _nma_fig(df, "forest")
+def rm_nma_rank(df, opt):      return _nma_fig(df, "ranking")
+def rm_nma_nodesplit(df, opt): return _nma_fig(df, "node-split")
+
+_NMA_COLS = [Column("Study", "text", True, "Study label"),
+             Column("Treatment1", "text", True, "First treatment in the comparison"),
+             Column("Treatment2", "text", True, "Second treatment"),
+             Column("TE", "number", True, "Effect of T1 vs T2 on the analysis scale (log OR/RR/HR or MD)"),
+             Column("seTE", "number", True, "Standard error of TE")]
+_NMA_EX = {"Study": ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"],
+           "Treatment1": ["B", "C", "D", "C", "D", "D", "B", "C"],
+           "Treatment2": ["A", "A", "A", "B", "B", "C", "A", "A"],
+           "TE": [0.30, 0.55, 0.65, 0.22, 0.35, 0.10, 0.28, 0.50],
+           "seTE": [0.12, 0.15, 0.18, 0.14, 0.20, 0.16, 0.13, 0.17]}
+
+register(PlotSpec("nma_network", "Network graph (NMA)", _CAT8,
+    "Network meta-analysis geometry — nodes = treatments (sized by studies), edges = direct comparisons. "
+    "One row per pairwise contrast (Study, Treatment1, Treatment2, TE, seTE; TE on the log scale for ratios).",
+    _NMA_COLS, _NMA_EX, rm_nma_network))
+register(PlotSpec("nma_forest", "Forest vs reference (NMA)", _CAT8,
+    "Pooled relative effect of every treatment vs the reference, from a frequentist network meta-analysis.",
+    _NMA_COLS, _NMA_EX, rm_nma_forest))
+register(PlotSpec("nma_rank", "Treatment ranking / P-scores (NMA)", _CAT8,
+    "P-score ranking of treatments (frequentist analogue of SUCRA).",
+    _NMA_COLS, _NMA_EX, rm_nma_rank))
+register(PlotSpec("nma_nodesplit", "Node-splitting (NMA consistency)", _CAT8,
+    "Direct vs indirect estimate for every comparison — the in-network inconsistency check.",
+    _NMA_COLS, _NMA_EX, rm_nma_nodesplit))

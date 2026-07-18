@@ -703,6 +703,24 @@ if (!("SE" %in% names(df)) || all(is.na(df$SE))) df$SE <- (df$UpperCI - df$Lower
 res <- rma(yi = df$Effect, sei = df$SE, method = "FE")
 sav <- gosh(res); plot(sav, out = 1, breaks = 40)
 """),
+# --- network meta-analysis (netmeta). sm='OR' assumes TE on the log scale; use 'MD' for mean differences. ---
+"nma_network": (["netmeta"], "base", """
+nm <- netmeta(TE, seTE, Treatment1, Treatment2, Study, data = df, sm = "OR", random = TRUE)
+netgraph(nm, plastic = FALSE, thickness = "number.of.studies", points = TRUE, cex.points = 3)
+"""),
+"nma_forest": (["netmeta"], "base", """
+nm <- netmeta(TE, seTE, Treatment1, Treatment2, Study, data = df, sm = "OR", random = TRUE)
+print(summary(nm)); forest(nm)
+"""),
+"nma_rank": (["netmeta"], "base", """
+nm <- netmeta(TE, seTE, Treatment1, Treatment2, Study, data = df, sm = "OR", random = TRUE)
+nr <- netrank(nm); print(nr)
+barplot(sort(nr$ranking.random, decreasing = TRUE), ylab = "P-score", las = 2, col = "#4682B4")
+"""),
+"nma_nodesplit": (["netmeta"], "base", """
+nm <- netmeta(TE, seTE, Treatment1, Treatment2, Study, data = df, sm = "OR", random = TRUE)
+ns <- netsplit(nm); print(ns); forest(ns)
+"""),
 }
 
 
