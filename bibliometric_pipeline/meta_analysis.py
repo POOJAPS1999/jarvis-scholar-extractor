@@ -854,7 +854,10 @@ def run_dta(df, model="random"):
     spec_png, spec_r, py, pv = _prop_ma(labels, TN, TN+FP, model, "Specificity")
     conc_png, conc_r, cy, cv = _prop_ma(labels, TP+TN, TP+FP+FN+TN, model, "Concordance")
     sens_d = disp("logit", sens_r["est"]); spec_d = disp("logit", spec_r["est"])
-    sroc_png = _sroc_plot(TP, FP, FN, TN, sens_d, spec_d)
+    try:
+        sroc_png, biv = _sroc_bivariate(TP, FP, FN, TN)   # modern Reitsma bivariate/HSROC
+    except Exception:
+        sroc_png, biv = _sroc_plot(TP, FP, FN, TN, sens_d, spec_d), None
     deeks_png, deeks_p = _deeks_plot(labels, TP, FP, FN, TN)
     loo_s = _loo_forest(labels, leave_one_out(sy, sv, model), sens_r, "logit")
     loo_p = _loo_forest(labels, leave_one_out(py, pv, model), spec_r, "logit")
@@ -868,6 +871,11 @@ def run_dta(df, model="random"):
               "Pooled specificity": f"{spec_d:.3f} {ci(spec_r)}",
               "Diagnostic odds ratio": f"{dor:.1f}",
               "Deeks' asymmetry test": f"p = {deeks_p:.3f} (" + ("no strong evidence of" if deeks_p >= .05 else "possible") + " publication bias)"}
+    if biv is not None:
+        extras["Bivariate summary (Reitsma)"] = (
+            f"sensitivity {biv['sens']:.3f} [{biv['sensCI'][0]:.2f}, {biv['sensCI'][1]:.2f}], "
+            f"specificity {biv['spec']:.3f} [{biv['specCI'][0]:.2f}, {biv['specCI'][1]:.2f}] "
+            f"(between-study ρ = {biv['rho']:.2f})")
     table = pd.DataFrame({"Study": labels, "TP": TP.astype(int), "FP": FP.astype(int),
                           "FN": FN.astype(int), "TN": TN.astype(int),
                           "Sensitivity": [f"{t/(t+f):.2f}" for t, f in zip(TP, FN)],
@@ -877,7 +885,8 @@ def run_dta(df, model="random"):
     interp = (f"Across {k} studies, pooled sensitivity was {sens_d:.2f} and specificity {spec_d:.2f} "
               f"(diagnostic odds ratio {dor:.1f}). The SROC summarises the joint accuracy; "
               f"Deeks' test p = {deeks_p:.3f}.")
-    caveats = ["SROC uses the Moses–Littenberg model; the R export runs the bivariate/HSROC (mada::reitsma) model.",
+    caveats = ["The SROC uses the Reitsma bivariate / HSROC model (matching mada::reitsma); if it fails to "
+               "converge it falls back to the Moses–Littenberg curve.",
                "Studies with a zero cell receive a 0.5 continuity correction."]
     return MetaResult(head, sens_r, table, interp, figs, extras, caveats)
 
@@ -916,3 +925,79 @@ def r_script_dta(df, model="random"):
         'meta::forest(metainf(m_sens, pooled="random"), xlab="Sensitivity (leave-one-out)")',
         'meta::forest(metainf(m_spec, pooled="random"), xlab="Specificity (leave-one-out)")',
     ]) + "\n"
+
+
+# ===========================================================================
+# Reitsma bivariate model (modern DTA meta-analysis) + HSROC plot
+# ===========================================================================
+def _expit(x): return 1/(1+np.exp(-x))
+
+def reitsma_bivariate(TP, FP, FN, TN):
+    """ML fit of the Reitsma bivariate random-effects model on
+    (logit sensitivity, logit false-positive-rate). Returns summary point,
+    between-study covariance, and the covariance of the summary estimates."""
+    from scipy.optimize import minimize
+    tp, fp, fn, tn = TP+0.5, FP+0.5, FN+0.5, TN+0.5
+    ySe = np.log(tp/fn); vSe = 1/tp + 1/fn          # logit(Se) + var
+    yF = np.log(fp/tn);  vF = 1/fp + 1/tn           # logit(FPR) + var
+    Y = np.column_stack([ySe, yF]); k = len(tp)
+    S = [np.diag([vSe[i], vF[i]]) for i in range(k)]
+
+    def nll(p):
+        muSe, muF, lts, ltf, zr = p
+        ts, tf, rho = np.exp(lts), np.exp(ltf), np.tanh(zr)
+        Sb = np.array([[ts*ts, rho*ts*tf], [rho*ts*tf, tf*tf]])
+        mu = np.array([muSe, muF]); tot = 0.0
+        for i in range(k):
+            V = Sb + S[i]
+            sign, ld = np.linalg.slogdet(V)
+            if sign <= 0: return 1e12
+            d = Y[i]-mu; tot += 0.5*ld + 0.5*d @ np.linalg.solve(V, d)
+        return tot
+
+    p0 = [ySe.mean(), yF.mean(), np.log(0.4), np.log(0.4), 0.0]
+    r = minimize(nll, p0, method="Nelder-Mead",
+                 options={"maxiter": 6000, "xatol": 1e-7, "fatol": 1e-7})
+    muSe, muF, lts, ltf, zr = r.x
+    ts, tf, rho = np.exp(lts), np.exp(ltf), np.tanh(zr)
+    Sb = np.array([[ts*ts, rho*ts*tf], [rho*ts*tf, tf*tf]])
+    A = np.zeros((2, 2))
+    for i in range(k):
+        A += np.linalg.inv(Sb + S[i])
+    covmu = np.linalg.inv(A)
+    return {"muSe": muSe, "muF": muF, "Sb": Sb, "covmu": covmu, "rho": rho,
+            "sens": _expit(muSe), "spec": _expit(-muF),
+            "sensCI": (_expit(muSe-Z*np.sqrt(covmu[0, 0])), _expit(muSe+Z*np.sqrt(covmu[0, 0]))),
+            "specCI": (_expit(-(muF+Z*np.sqrt(covmu[1, 1]))), _expit(-(muF-Z*np.sqrt(covmu[1, 1]))))}
+
+def _sroc_bivariate(TP, FP, FN, TN):
+    r = reitsma_bivariate(TP, FP, FN, TN)
+    tp, fp, fn, tn = TP+0.5, FP+0.5, FN+0.5, TN+0.5
+    TPR = tp/(tp+fn); FPR = fp/(fp+tn); N = TP+FP+FN+TN
+    # SROC curve = conditional mean of logit(Se) given logit(FPR)
+    slope = r["Sb"][0, 1]/r["Sb"][1, 1]
+    fg = np.linspace(0.005, 0.995, 300); lf = np.log(fg/(1-fg))
+    Se = _expit(r["muSe"] + slope*(lf - r["muF"]))
+    sx, sy = _expit(r["muF"]), _expit(r["muSe"])   # summary operating point
+    # 95% confidence ellipse in (FPR, Se) space
+    C = np.array([[r["covmu"][1, 1], r["covmu"][1, 0]], [r["covmu"][0, 1], r["covmu"][0, 0]]])
+    center = np.array([r["muF"], r["muSe"]])
+    vals, vecs = np.linalg.eigh(C); vals = np.clip(vals, 1e-12, None)
+    th = np.linspace(0, 2*np.pi, 200); sc = np.sqrt(stats.chi2.ppf(0.95, 2))
+    pts = center[:, None] + (vecs @ (np.sqrt(vals)[:, None]*np.vstack([np.cos(th), np.sin(th)])))*sc
+    ex, ey = _expit(pts[0]), _expit(pts[1])
+    fig, ax = plt.subplots(figsize=(6.4, 6.3), dpi=200)
+    ax.plot(fg, Se, color=RED, lw=2, zorder=2, label="Bivariate SROC")
+    ax.plot(ex, ey, color=ORANGE, lw=1.6, ls="--", zorder=3, label="95% confidence region")
+    sizes = 30 + 240*np.sqrt(N)/np.sqrt(N.max())
+    ax.scatter(FPR, TPR, s=sizes, facecolor=STEEL, edgecolor="black", lw=0.6, alpha=0.85, zorder=4)
+    ax.scatter([sx], [sy], marker="*", s=430, color=ORANGE, edgecolor="black", lw=0.8, zorder=5,
+               label="Summary point")
+    ax.plot([0, 1], [0, 1], color=GREY, ls=":", lw=1)
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1); ax.set_aspect("equal")
+    ax.set_xlabel("False positive rate (1 − specificity)", fontsize=11, color=INK)
+    ax.set_ylabel("Sensitivity", fontsize=11, color=INK)
+    ax.set_title("Summary ROC — Reitsma bivariate model", fontsize=12.5, fontweight="bold", color=INK)
+    ax.legend(frameon=False, fontsize=9, loc="lower right")
+    for s in ("top", "right"): ax.spines[s].set_visible(False)
+    fig.tight_layout(); _wm(fig); return fig_to_png(fig, dpi=200), r
