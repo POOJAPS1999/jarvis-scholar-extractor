@@ -22,15 +22,17 @@ import io
 
 import pandas as pd
 
-_SANS = "'Inter', 'Segoe UI', 'Helvetica Neue', Arial, system-ui, sans-serif"
-_SERIF = "'Inter', 'Segoe UI', Arial, system-ui, sans-serif"
+# Unified type: Source Serif (Streamlit's built-in serif — the "Fuzzy match"
+# heading font) across the whole app, headings and body alike.
+_SERIF = "'Source Serif 4', 'Source Serif Pro', Georgia, 'Times New Roman', serif"
+_SANS = _SERIF
 
 # ---------------------------------------------------------------------
 # Global theme CSS
 # ---------------------------------------------------------------------
 THEME_CSS = f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;0,8..60,900;1,8..60,400&display=swap');
 :root {{
   --js-cyan: #0fb5d6;
   --js-cyan-deep: #0e7f9c;
