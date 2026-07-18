@@ -1517,35 +1517,39 @@ _PRISMA_ALIAS = {
 
 def r_prisma2020(df, opt):
     """PRISMA 2020 flow (databases & registers) from a Field / Count table.
-    Rows named 'Reason: <text>' fill the 'Reports excluded' box."""
+    'Source: <db>' / 'Register: <name>' rows list each named database in the
+    identification box; 'Reason: <text>' rows fill the 'Reports excluded' box."""
     from . import prisma as _PR
     F = _col(df, "Field").astype(str); C = _col(df, "Count")
-    d, reasons = {}, []
+    d, reasons, sources = {}, [], []
     for f, c in zip(F, C):
         fl = str(f).strip().lower()
         try:
             cv = int(float(c))
         except Exception:
             cv = 0
-        if fl.startswith("reason") or fl.startswith("excluded:"):
+        if fl.startswith(("source:", "database:", "register:")):
+            sources.append((str(f).split(":", 1)[1].strip(), cv))
+        elif fl.startswith("reason") or fl.startswith("excluded:"):
             lbl = str(f).split(":", 1)[1].strip() if ":" in str(f) else str(f)
             reasons.append((lbl, cv))
         elif fl in _PRISMA_ALIAS:
             d[_PRISMA_ALIAS[fl]] = cv
-    return _PR.flow_png(d, reasons=reasons or None,
+    return _PR.flow_png(d, reasons=reasons or None, sources=sources or None,
                         title=opt.title or "PRISMA 2020 flow diagram", return_fig=True)
 
 register(PlotSpec("prisma", "PRISMA 2020 flow", "7. Study-flow diagrams",
-    "PRISMA 2020 study-selection flow (databases & registers). One row per box as Field + Count; "
-    "add 'Reason: <text>' rows for the 'Reports excluded' box. (The two-stream version and a form-based "
-    "builder live in the Meta-Analysis module.)",
-    [Column("Field","text",True,"PRISMA box (e.g. Databases, Records screened) or 'Reason: <text>'"),
+    "PRISMA 2020 study-selection flow (databases & registers). One row per box as Field + Count. "
+    "Use 'Source: <database>' rows to list each database searched, and 'Reason: <text>' rows for the "
+    "'Reports excluded' box. (The two-stream version and a form-based builder live in the Meta-Analysis module.)",
+    [Column("Field","text",True,"PRISMA box, or 'Source: <db>' / 'Reason: <text>'"),
      Column("Count","number",True,"Count for that box")],
-    {"Field": ["Databases","Registers","Duplicates removed","Automation ineligible","Other removed",
+    {"Field": ["Source: PubMed","Source: Scopus","Source: Embase","Register: ClinicalTrials.gov",
+               "Duplicates removed","Automation ineligible","Other removed",
                "Records screened","Records excluded","Reports sought","Reports not retrieved","Reports assessed",
                "Reason: Wrong population","Reason: Wrong outcome","Reason: No extractable data",
                "Studies included","Reports included"],
-     "Count": [1200,25,290,0,10,925,780,145,5,140,40,30,10,45,50]},
+     "Count": [620,400,180,25,290,0,10,925,780,145,5,140,40,30,10,45,50]},
     r_prisma2020))
 
 register(PlotSpec("consort", "CONSORT flow", "7. Study-flow diagrams",

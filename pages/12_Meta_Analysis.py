@@ -60,9 +60,16 @@ if is_prisma:
     st.markdown("#### PRISMA 2020 flow diagram")
     st.caption("Enter your study-selection counts → get a publication-ready PRISMA 2020 figure "
                "(databases & registers template) plus a matching DiagrammeR R script.")
+    st.markdown("**Records identified from — sources** (one per line, as `name = count`; "
+                "list each database/register you searched):")
+    default_sources = "\n".join(f"{nm} = {c}" for nm, c in PR.DEFAULT_SOURCES)
+    src_txt = st.text_area("Sources", value=default_sources, key="pr_sources",
+                           label_visibility="collapsed", height=110)
+
     d = {}
     fc = st.columns(2)
-    for i, (k, label, default) in enumerate(PR.FIELDS):
+    _core = [f for f in PR.FIELDS if f[0] not in ("databases", "registers")]
+    for i, (k, label, default) in enumerate(_core):
         d[k] = fc[i % 2].number_input(label, min_value=0, value=int(default), step=1, key=f"pr_{k}")
     st.markdown("**Reports excluded — reasons** (one per line, as `reason = count`):")
     default_reasons = "\n".join(f"{r} = {n}" for r, n in PR.EXAMPLE_REASONS)
@@ -72,10 +79,16 @@ if is_prisma:
     two_stream = st.checkbox("Add the 'other methods' identification stream "
                              "(websites / organisations / citation searching)", value=False,
                              help="Turns the single-column figure into the full two-stream PRISMA 2020 layout.")
-    om, om_rtxt = {}, ""
+    om, om_rtxt, om_src_txt = {}, "", ""
     if two_stream:
+        st.markdown("**Other-methods sources** (one per line, as `name = count`; "
+                    "list only the ones you used — e.g. just citation searching):")
+        om_default_src = "\n".join(f"{nm} = {c}" for nm, c in PR.DEFAULT_OM_SOURCES)
+        om_src_txt = st.text_area("Other-methods sources", value=om_default_src,
+                                  key="pr_om_sources", label_visibility="collapsed", height=80)
         oc = st.columns(2)
-        for i, (k, label, default) in enumerate(PR.OM_FIELDS):
+        _om_core = [f for f in PR.OM_FIELDS if f[0] not in ("om_websites", "om_orgs", "om_citation")]
+        for i, (k, label, default) in enumerate(_om_core):
             om[k] = oc[i % 2].number_input(label, min_value=0, value=int(default), step=1, key=f"pr_{k}")
         st.markdown("**Other-methods reports excluded — reasons** (`reason = count`):")
         om_default = "\n".join(f"{r} = {n}" for r, n in PR.EXAMPLE_OM_REASONS)
@@ -103,17 +116,23 @@ if is_prisma:
     if st.button("🖼 Generate PRISMA diagram", type="primary"):
         reasons = _parse_reasons(rtxt)
         om_reasons = _parse_reasons(om_rtxt)
+        sources = _parse_reasons(src_txt)
+        om_sources = _parse_reasons(om_src_txt)
         ttl = title or "PRISMA 2020 flow diagram"
         try:
             with jarvis_spinner("Drawing the PRISMA flow…"):
                 if two_stream:
                     st.session_state["prisma_png"] = PR.flow_png_2stream(
-                        d, om, reasons=reasons or None, om_reasons=om_reasons or None, title=ttl)
+                        d, om, reasons=reasons or None, om_reasons=om_reasons or None, title=ttl,
+                        sources=sources or None, om_sources=om_sources or None)
                     st.session_state["prisma_r"] = PR.r_script(
-                        d, reasons=reasons or None, om=om, om_reasons=om_reasons or None)
+                        d, reasons=reasons or None, om=om, om_reasons=om_reasons or None,
+                        sources=sources or None, om_sources=om_sources or None)
                 else:
-                    st.session_state["prisma_png"] = PR.flow_png(d, reasons=reasons or None, title=ttl)
-                    st.session_state["prisma_r"] = PR.r_script(d, reasons=reasons or None)
+                    st.session_state["prisma_png"] = PR.flow_png(d, reasons=reasons or None, title=ttl,
+                                                                 sources=sources or None)
+                    st.session_state["prisma_r"] = PR.r_script(d, reasons=reasons or None,
+                                                               sources=sources or None)
         except Exception as e:
             st.error(f"Could not build the diagram: {e}")
 

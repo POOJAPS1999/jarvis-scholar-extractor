@@ -57,6 +57,10 @@ OM_FIELDS = [
 ]
 EXAMPLE_OM_REASONS = [("Wrong outcome", 8), ("No extractable data", 4)]
 
+# Named identification sources (user lists only the ones they used).
+DEFAULT_SOURCES = [("PubMed", 620), ("Scopus", 400), ("Embase", 180), ("Registers", 25)]
+DEFAULT_OM_SOURCES = [("Citation searching (snowballing)", 20)]
+
 
 def _box(ax, cx, cy, w, h, text, fs=10.5, fill=FILL, tc=INK, align="center"):
     ax.add_patch(FancyBboxPatch((cx - w/2, cy - h/2), w, h,
@@ -81,7 +85,17 @@ def _band(ax, cy, h, label):
             fontsize=11.5, fontweight="bold", color=BAND_TX, zorder=3)
 
 
-def flow_png(d, reasons=None, title="PRISMA 2020 flow diagram", return_fig=False):
+def _ident_box(ax, cx, cy, w, lines, fs=10):
+    """'Records identified from:' box that lists each named source on its own
+    line. Returns the box height so callers can anchor the outgoing arrow."""
+    body = "\n".join(f"{nm}  (n = {int(c or 0)})" for nm, c in lines) or "(none)"
+    text = "Records identified from:\n" + body
+    h = max(0.09, 0.045 + 0.027 * len(lines))
+    _box(ax, cx, cy, w, h, text, fs=fs, align="left")
+    return h
+
+
+def flow_png(d, reasons=None, title="PRISMA 2020 flow diagram", sources=None, return_fig=False):
     reasons = reasons if reasons is not None else EXAMPLE_REASONS
     g = lambda k: int(d.get(k, 0) or 0)
 
@@ -100,9 +114,8 @@ def flow_png(d, reasons=None, title="PRISMA 2020 flow diagram", return_fig=False
     _band(ax, yE, 0.13, "Included")
 
     # ---- Identification ----
-    _box(ax, mx, yA, mw, 0.11,
-         f"Records identified from:\nDatabases  (n = {g('databases')})\nRegisters  (n = {g('registers')})",
-         align="left")
+    src = sources if sources else [("Databases", g('databases')), ("Registers", g('registers'))]
+    a_h = _ident_box(ax, mx, yA, mw, src)
     _box(ax, sx, yA, sw, 0.13,
          "Records removed before screening:\n"
          f"Duplicate records removed  (n = {g('dup_removed')})\n"
@@ -115,7 +128,7 @@ def flow_png(d, reasons=None, title="PRISMA 2020 flow diagram", return_fig=False
     _box(ax, mx, yB, mw, 0.075, f"Records screened\n(n = {g('screened')})")
     _box(ax, sx, yB, sw, 0.065, f"Records excluded\n(n = {g('records_excluded')})", align="left")
     _arrow(ax, mx + mw/2, yB, sx - sw/2, yB)
-    _arrow(ax, mx, yA - 0.055, mx, yB + 0.038)
+    _arrow(ax, mx, yA - a_h/2, mx, yB + 0.038)
 
     _box(ax, mx, yC, mw, 0.075, f"Reports sought for retrieval\n(n = {g('sought')})")
     _box(ax, sx, yC, sw, 0.065, f"Reports not retrieved\n(n = {g('not_retrieved')})", align="left")
@@ -147,7 +160,7 @@ def flow_png(d, reasons=None, title="PRISMA 2020 flow diagram", return_fig=False
 
 
 def flow_png_2stream(d, om, reasons=None, om_reasons=None, title="PRISMA 2020 flow diagram",
-                     return_fig=False):
+                     sources=None, om_sources=None, return_fig=False):
     """Two-stream PRISMA 2020: 'databases & registers' (left) + 'other methods'
     (right, websites / organisations / citation searching), both feeding the
     single 'studies included' box."""
@@ -178,9 +191,8 @@ def flow_png_2stream(d, om, reasons=None, om_reasons=None, title="PRISMA 2020 fl
              ha="center", va="center", fontsize=12, fontweight="bold", color=INK)
 
     # ---- LEFT stream (databases & registers) ----
-    _box(ax, mxL, yA, mwL, 0.10,
-         f"Records identified from:\nDatabases  (n = {g('databases')})\nRegisters  (n = {g('registers')})",
-         fs=10, align="left")
+    srcL = sources if sources else [("Databases", g('databases')), ("Registers", g('registers'))]
+    a_hL = _ident_box(ax, mxL, yA, mwL, srcL, fs=10)
     _box(ax, sxL, yA, swL, 0.12,
          "Records removed before\nscreening:\n"
          f"Duplicates removed  (n = {g('dup_removed')})\n"
@@ -191,7 +203,7 @@ def flow_png_2stream(d, om, reasons=None, om_reasons=None, title="PRISMA 2020 fl
     _box(ax, mxL, yB, mwL, 0.07, f"Records screened\n(n = {g('screened')})", fs=10)
     _box(ax, sxL, yB, swL, 0.06, f"Records excluded\n(n = {g('records_excluded')})", fs=9, align="left")
     _arrow(ax, mxL + mwL/2, yB, sxL - swL/2, yB)
-    _arrow(ax, mxL, yA - 0.05, mxL, yB + 0.036)
+    _arrow(ax, mxL, yA - a_hL/2, mxL, yB + 0.036)
 
     _box(ax, mxL, yC, mwL, 0.07, f"Reports sought for retrieval\n(n = {g('sought')})", fs=10)
     _box(ax, sxL, yC, swL, 0.06, f"Reports not retrieved\n(n = {g('not_retrieved')})", fs=9, align="left")
@@ -205,14 +217,13 @@ def flow_png_2stream(d, om, reasons=None, om_reasons=None, title="PRISMA 2020 fl
     _arrow(ax, mxL, yC - 0.036, mxL, yD + 0.036)
 
     # ---- RIGHT stream (other methods) ----
-    _box(ax, mxR, yA, mwR, 0.10,
-         f"Records identified from:\nWebsites  (n = {go('om_websites')})\n"
-         f"Organisations  (n = {go('om_orgs')})\nCitation searching  (n = {go('om_citation')})",
-         fs=10, align="left")
+    srcR = om_sources if om_sources else [("Websites", go('om_websites')), ("Organisations", go('om_orgs')),
+                                          ("Citation searching", go('om_citation'))]
+    a_hR = _ident_box(ax, mxR, yA, mwR, srcR, fs=10)
     _box(ax, mxR, yC, mwR, 0.07, f"Reports sought for retrieval\n(n = {go('om_sought')})", fs=10)
     _box(ax, sxR, yC, swR, 0.06, f"Reports not retrieved\n(n = {go('om_not_retrieved')})", fs=9, align="left")
     _arrow(ax, mxR + mwR/2, yC, sxR - swR/2, yC)
-    _arrow(ax, mxR, yA - 0.05, mxR, yC + 0.036)
+    _arrow(ax, mxR, yA - a_hR/2, mxR, yC + 0.036)
 
     rtxtR = "Reports excluded:\n" + "\n".join(f"{r}  (n = {n})" for r, n in om_reasons)
     _box(ax, mxR, yD, mwR, 0.07, f"Reports assessed for eligibility\n(n = {go('om_assessed')})", fs=10)
@@ -237,19 +248,25 @@ def flow_png_2stream(d, om, reasons=None, om_reasons=None, title="PRISMA 2020 fl
     return buf.getvalue()
 
 
-def r_script(d, reasons=None, om=None, om_reasons=None):
+def r_script(d, reasons=None, om=None, om_reasons=None, sources=None, om_sources=None):
     """Matching PRISMA2020-style flow via DiagrammeR (reviewer-familiar).
-    Pass `om` (+ `om_reasons`) to add the second 'other methods' stream."""
+    Pass `om` (+ `om_reasons`) to add the second 'other methods' stream, and
+    `sources` / `om_sources` to list named databases / other-method sources."""
     reasons = reasons if reasons is not None else EXAMPLE_REASONS
     g = lambda k: int(d.get(k, 0) or 0)
     rlines = "\\n".join(f"{r} (n = {n})" for r, n in reasons)
+    src = sources if sources else [("Databases", g('databases')), ("Registers", g('registers'))]
+    a_lines = "\\n".join(f"{nm} (n = {int(c or 0)})" for nm, c in src)
     om_nodes = om_edges = ""
     if om:
         om_reasons = om_reasons if om_reasons is not None else EXAMPLE_OM_REASONS
         go = lambda k: int(om.get(k, 0) or 0)
         orlines = "\\n".join(f"{r} (n = {n})" for r, n in om_reasons)
+        osrc = om_sources if om_sources else [("Websites", go('om_websites')), ("Organisations", go('om_orgs')),
+                                              ("Citation searching", go('om_citation'))]
+        oa_lines = "\\n".join(f"{nm} (n = {int(c or 0)})" for nm, c in osrc)
         om_nodes = f'''
-  oa [label = 'Records identified from:\\nWebsites (n = {go('om_websites')})\\nOrganisations (n = {go('om_orgs')})\\nCitation searching (n = {go('om_citation')})']
+  oa [label = 'Records identified from:\\n{oa_lines}']
   oc [label = 'Reports sought for retrieval (n = {go('om_sought')})']
   oc2[label = 'Reports not retrieved (n = {go('om_not_retrieved')})']
   od [label = 'Reports assessed for eligibility (n = {go('om_assessed')})']
@@ -266,7 +283,7 @@ digraph prisma {{
   graph [layout = dot, rankdir = TB, fontname = Helvetica]
   node  [shape = box, style = filled, fillcolor = white, fontname = Helvetica]
 
-  a  [label = 'Records identified from:\\nDatabases (n = {g('databases')})\\nRegisters (n = {g('registers')})']
+  a  [label = 'Records identified from:\\n{a_lines}']
   a2 [label = 'Records removed before screening:\\nDuplicates (n = {g('dup_removed')})\\nAutomation-ineligible (n = {g('auto_ineligible')})\\nOther reasons (n = {g('other_removed')})']
   b  [label = 'Records screened (n = {g('screened')})']
   b2 [label = 'Records excluded (n = {g('records_excluded')})']

@@ -588,9 +588,11 @@ p <- ggplot(df, aes(reorder(Subject, -PctChange), PctChange, fill = PctChange < 
 gv <- function(cands){for(nm in cands){v<-df$Count[tolower(trimws(df$Field))==tolower(nm)]; if(length(v)) return(v[1])}; 0}
 rx <- df[grepl('^reason|^excluded:', tolower(trimws(as.character(df$Field)))), ]
 rlab <- if (nrow(rx)) paste(paste0(sub('^[^:]*:\\\\s*','',rx$Field),' (n = ',rx$Count,')'), collapse='\\\\n') else 'None'
+sx <- df[grepl('^source:|^database:|^register:', tolower(trimws(as.character(df$Field)))), ]
+alab <- if (nrow(sx)) paste(paste0(sub('^[^:]*:\\\\s*','',sx$Field),' (n = ',sx$Count,')'), collapse='\\\\n') else paste0('Databases (n = ', gv(c('databases')), ')\\\\nRegisters (n = ', gv(c('registers')), ')')
 library(DiagrammeR)
 dot <- paste0("digraph prisma { graph [layout=dot, rankdir=TB, fontname=Helvetica] node [shape=box, style=filled, fillcolor=white, fontname=Helvetica] ",
-"a  [label='Records identified from:\\\\nDatabases (n = ", gv(c('databases')), ")\\\\nRegisters (n = ", gv(c('registers')), ")'] ",
+"a  [label='Records identified from:\\\\n", alab, "'] ",
 "a2 [label='Records removed before screening:\\\\nDuplicates (n = ", gv(c('duplicates removed','duplicates')), ")\\\\nAutomation-ineligible (n = ", gv(c('automation ineligible','automation-ineligible')), ")\\\\nOther (n = ", gv(c('other removed','other reasons')), ")'] ",
 "b  [label='Records screened (n = ", gv(c('records screened','screened')), ")'] ",
 "b2 [label='Records excluded (n = ", gv(c('records excluded')), ")'] ",
