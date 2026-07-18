@@ -688,6 +688,21 @@ dor <- with(dm, (TP*TN)/(FP*FN)); dor[!is.finite(dor)] <- NA
 plot(1/sqrt(ess), log(dor), pch = 19, xlab = "1/sqrt(ESS)", ylab = "ln(DOR)", main = "Deeks' funnel")
 abline(lm(log(dor) ~ I(1/sqrt(ess))), col = "firebrick")
 """),
+"bubble_meta": (["metafor"], "base", """
+if (!("SE" %in% names(df)) || all(is.na(df$SE))) df$SE <- (df$UpperCI - df$LowerCI) / (2 * 1.959964)
+res <- rma(yi = df$Effect, sei = df$SE, mods = ~ df$Moderator, method = "REML"); print(summary(res))
+regplot(res, xlab = "Moderator", las = 1, digits = 2, bty = "l")
+"""),
+"drapery_meta": (["metafor"], "base", """
+if (!("SE" %in% names(df)) || all(is.na(df$SE))) df$SE <- (df$UpperCI - df$LowerCI) / (2 * 1.959964)
+res <- rma(yi = df$Effect, sei = df$SE, method = "REML")
+drapery(res, labels = "study", slab = df$Study)
+"""),
+"gosh_meta": (["metafor"], "base", """
+if (!("SE" %in% names(df)) || all(is.na(df$SE))) df$SE <- (df$UpperCI - df$LowerCI) / (2 * 1.959964)
+res <- rma(yi = df$Effect, sei = df$SE, method = "FE")
+sav <- gosh(res); plot(sav, out = 1, breaks = 40)
+"""),
 }
 
 

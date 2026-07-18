@@ -1805,3 +1805,77 @@ register(PlotSpec("sroc_meta", "SROC (diagnostic accuracy)", _CAT8,
 register(PlotSpec("deeks_meta", "Deeks' funnel (DTA bias)", _CAT8,
     "Deeks' funnel-plot asymmetry test for diagnostic accuracy publication bias.",
     _DTA_COLS, _DTA_EX, rm_deeks))
+
+
+def rm_bubble(df, opt):
+    """Meta-regression bubble plot (effect vs a study-level moderator)."""
+    from . import meta_analysis as MA
+    yi = _num(_col(df, "Effect")).values.astype(float)
+    se_c = _col(df, "SE")
+    if se_c is not None and _num(se_c).notna().any():
+        vi = _num(se_c).values.astype(float) ** 2
+    else:
+        lo = _num(_col(df, "LowerCI")).values.astype(float)
+        hi = _num(_col(df, "UpperCI")).values.astype(float)
+        vi = ((hi - lo) / (2 * _MZ)) ** 2
+    x = _num(_col(df, "Moderator")).values.astype(float)
+    ok = np.isfinite(yi) & np.isfinite(vi) & (vi > 0) & np.isfinite(x)
+    yi, vi, x = yi[ok], vi[ok], x[ok]
+    reg = MA.metareg(yi, vi, x, "random")
+    return MA.bubble_plot(x, yi, vi, reg, "raw", opt.xlabel or "Moderator")
+
+def rm_drapery(df, opt):
+    """Drapery plot — each study's two-sided p-value (confidence) curve + pooled."""
+    from scipy import stats as _st
+    from . import meta_analysis as MA
+    lab, yi, vi = _meta_ec(df); se = np.sqrt(vi)
+    r = MA.pool(yi, vi, "random")
+    lo = float(np.min(yi - 4 * se)); hi = float(np.max(yi + 4 * se))
+    th = np.linspace(lo, hi, 500)
+    fig, ax = plt.subplots(figsize=(7.6, 5.3), dpi=200)
+    for y, s in zip(yi, se):
+        ax.plot(th, 2 * (1 - _st.norm.cdf(np.abs(th - y) / s)), color="#4682B4", lw=0.8, alpha=0.45, zorder=2)
+    ax.plot(th, 2 * (1 - _st.norm.cdf(np.abs(th - r["est"]) / r["se"])), color="#E8912A", lw=2.4, zorder=3)
+    ax.axhline(0.05, color="#c3423f", ls="--", lw=1)
+    ax.axvline(0.0, color="#41566b", ls=":", lw=1)
+    ax.set_ylim(0, 1.02); ax.set_xlim(lo, hi)
+    ax.set_xlabel("Effect", fontsize=11, color="#12283b")
+    ax.set_ylabel("p-value (two-sided)", fontsize=11, color="#12283b")
+    ax.set_title("Drapery plot", fontsize=12.5, fontweight="bold", color="#12283b")
+    for s in ("top", "right"): ax.spines[s].set_visible(False)
+    fig.tight_layout(); return fig
+
+def rm_gosh(df, opt):
+    """GOSH plot — pooled effect vs I^2 across many study subsets."""
+    import itertools
+    from . import meta_analysis as MA
+    lab, yi, vi = _meta_ec(df); k = len(yi)
+    rng = np.random.default_rng(0); cap = 2500
+    if k <= 13:
+        subs = [c for r in range(2, k + 1) for c in itertools.combinations(range(k), r)]
+        if len(subs) > cap:
+            subs = [subs[i] for i in rng.choice(len(subs), cap, replace=False)]
+    else:
+        subs = [tuple(rng.choice(k, int(rng.integers(2, k + 1)), replace=False)) for _ in range(cap)]
+    est, i2 = [], []
+    for c in subs:
+        c = list(c); rr = MA.pool(yi[c], vi[c], "fixed")
+        est.append(rr["est"]); i2.append(rr["I2"])
+    fig, ax = plt.subplots(figsize=(7.2, 5.3), dpi=200)
+    ax.scatter(est, i2, s=7, alpha=0.22, color="#4682B4", edgecolor="none", zorder=2)
+    ax.set_xlabel("Pooled effect (subset)", fontsize=11, color="#12283b")
+    ax.set_ylabel("I² (%)", fontsize=11, color="#12283b")
+    ax.set_title(f"GOSH plot ({len(subs)} subsets)", fontsize=12.5, fontweight="bold", color="#12283b")
+    for s in ("top", "right"): ax.spines[s].set_visible(False)
+    fig.tight_layout(); return fig
+
+register(PlotSpec("bubble_meta", "Bubble plot (meta-regression)", _CAT8,
+    "Meta-regression of the effect on a study-level moderator, with a fitted line and precision-scaled bubbles.",
+    _META_EC_COLS + [Column("Moderator", "number", True, "Study-level covariate (e.g. year, dose, mean age)")],
+    {**_META_EC_EX, "Moderator": [1, 2, 3, 4, 5, 6, 7, 8]}, rm_bubble))
+register(PlotSpec("drapery_meta", "Drapery plot", _CAT8,
+    "Confidence (p-value) curves for each study plus the pooled curve — an alternative to the forest.",
+    _META_EC_COLS, _META_EC_EX, rm_drapery))
+register(PlotSpec("gosh_meta", "GOSH plot", _CAT8,
+    "Graphical display of study heterogeneity: pooled effect vs I² across many study subsets (spots outliers/clusters).",
+    _META_EC_COLS, _META_EC_EX, rm_gosh))
