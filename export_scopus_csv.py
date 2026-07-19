@@ -331,16 +331,32 @@ def _map_access_type(open_access):
     return "Open Access" if v == "Yes" else ""
 
 
+def _pick(row, low, *cands):
+    """First non-empty value among candidate column names (exact match first,
+    then case-insensitive) so a differently-named journal/language column still
+    maps correctly."""
+    for c in cands:
+        for key in (c, low.get(c.strip().lower())):
+            if key is not None and key in row:
+                v = row.get(key, "")
+                if v is not None and str(v).strip() and str(v).strip().lower() != "nan":
+                    return _clean_str(v)
+    return ""
+
+
 def convert_row(row):
     aff_map_json = row.get("Author_Affiliation_Map", "")
     authors_joined = row.get("Authors", "")
+    low = {str(k).strip().lower(): k for k in row.keys()}
 
     out = {
         "Authors": _scopus_authors_field(authors_joined),
         "Author(s) ID": _scopus_author_ids_field(row.get("Author(s) ID (synthetic)", "")),
         "Title": _clean_str(row.get("TITLE", "")),
         "Year": _clean_str(row.get("YEAR", "")),
-        "Source title": _clean_str(row.get("Journal", "")),
+        "Source title": _pick(row, low, "Journal", "Source title", "Source Title", "Journal Name",
+                              "Journal Title", "Full Journal Title", "Publication Name", "Source",
+                              "container-title", "journal", "SO"),
         "Volume": "",
         "Issue": "",
         "Art. No.": "",
@@ -378,8 +394,13 @@ def convert_row(row):
         "ISBN": "",
         "CODEN": "",
         "PubMed ID": _clean_str(row.get("PMID", "")),
-        "Language of Original Document": "",
-        "Abbreviated Source Title": "",
+        # Map a language column if the enrichment provides one; otherwise default to
+        # English (these biomedical/PubMed corpora are overwhelmingly English), so
+        # bibliometrix's language (LA) analysis isn't left blank.
+        "Language of Original Document": _pick(row, low, "Language", "Language of Original Document",
+                                               "LA", "language") or "English",
+        "Abbreviated Source Title": _pick(row, low, "Abbreviated Source Title", "Journal Abbreviation",
+                                          "ISO Abbreviation", "Abbrev Journal"),
         "Document Type": _map_document_type(row.get("Article Type", "")),
         "Publication Stage": "Final",
         "Access Type": _map_access_type(row.get("Open Access", "")),

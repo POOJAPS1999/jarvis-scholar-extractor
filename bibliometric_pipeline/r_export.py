@@ -102,6 +102,91 @@ if ("Group" %in% names(df)) {
   print(t.test(df$Value)$conf.int)   # 95% CI for the mean
 }
 """),
+"ci_mean": ([], """
+print(t.test(df$Value))   # mean + 95% CI
+"""),
+"normality_more": (["nortest", "moments"], """
+print(ks.test(scale(df$Value), "pnorm"))
+print(ad.test(df$Value))
+cat("Skewness:", skewness(df$Value), " Kurtosis:", kurtosis(df$Value), "\\n")
+"""),
+"bartlett": ([], """
+bartlett.test(Value ~ factor(Group), data = df)
+"""),
+"effect_size": (["effsize"], """
+cohen.d(Value ~ Group, data = df, hedges.correction = TRUE)
+"""),
+"games_howell": (["rstatix"], """
+games_howell_test(df, Value ~ Group)
+"""),
+"anova_two": (["car"], """
+fit <- aov(Value ~ Factor1 * Factor2, data = df)
+print(summary(fit)); print(Anova(fit, type = 3))
+"""),
+"ancova": (["car"], """
+fit <- aov(Value ~ Covariate + Group, data = df)
+print(Anova(fit, type = 3))
+"""),
+"rm_anova": (["rstatix"], """
+anova_test(data = df, dv = Value, wid = Subject, within = Condition)
+"""),
+"mcnemar": ([], """
+mcnemar.test(table(df$Before, df$After))
+"""),
+"cochran_q": (["rstatix"], """
+cochran_qtest(df, Outcome ~ Condition | Subject)
+"""),
+"pointbiserial": ([], """
+cor.test(df$Binary, df$Value)   # point-biserial = Pearson with a 0/1 variable
+"""),
+"partial_corr": (["ppcor"], """
+pcor.test(df$X, df$Y, df$Covariate)
+"""),
+"reg_diagnostics": (["car"], """
+fit <- lm(Y ~ ., data = df); print(summary(fit))
+print(vif(fit)); print(durbinWatsonTest(fit))
+"""),
+"poisson": ([], """
+fit <- glm(Count ~ ., data = df, family = poisson); print(summary(fit))
+cat("IRR:\\n"); print(exp(coef(fit)))
+"""),
+"fleiss": (["irr"], """
+kappam.fleiss(df)
+"""),
+"power_anova": (["pwr"], """
+pwr.anova.test(k = @GROUPS@, f = @EFFECT_F@, sig.level = @ALPHA@, power = @POWER@)
+"""),
+"power_prop": (["pwr"], """
+pwr.2p.test(h = ES.h(@P1@, @P2@), sig.level = @ALPHA@, power = @POWER@)
+"""),
+"power_corr": (["pwr"], """
+pwr.r.test(r = @R@, sig.level = @ALPHA@, power = @POWER@)
+"""),
+"kaplan_meier": (["survival"], """
+fit <- survfit(Surv(Time, Event) ~ Group, data = df)
+print(fit); plot(fit, col = 1:length(unique(df$Group)), xlab = "Time", ylab = "Survival")
+survdiff(Surv(Time, Event) ~ Group, data = df)   # log-rank
+"""),
+"cox_ph": (["survival"], """
+fit <- coxph(Surv(Time, Event) ~ . - Time - Event, data = df)
+print(summary(fit))
+"""),
+"pca": ([], """
+X <- df[sapply(df, is.numeric)]
+p <- prcomp(X, scale. = TRUE); print(summary(p)); biplot(p)
+"""),
+"kmeans": ([], """
+X <- scale(df[sapply(df, is.numeric)])
+km <- kmeans(X, centers = @K@, nstart = 10); print(km$size)
+plot(X, col = km$cluster, pch = 19)
+"""),
+"lda": (["MASS"], """
+fit <- lda(Group ~ ., data = df); print(fit)
+"""),
+"manova": ([], """
+fit <- manova(cbind(Y1, Y2) ~ Group, data = df)
+summary(fit, test = "Wilks")
+"""),
 "crosstab": ([], """
 tab <- table(df$CatA, df$CatB)
 print(addmargins(tab))
@@ -244,6 +329,10 @@ def stat_r_script(spec, df=None, params=None) -> str:
                     'type = "two.sample")\n')
         else:
             code = _sub(code, {"D": _rnum(d), "A": _rnum(a), "P": _rnum(pw)})
+    # generic: substitute @PARAMNAME@ for any spec param (simple-named params)
+    for p in getattr(spec, "params", []) or []:
+        val = params.get(p.name, p.default)
+        code = _sub(code, {p.name.upper(): _rnum(val) if isinstance(val, (int, float)) else str(val)})
     parts = [_header(f"Statistics — {spec.name}", packages)]
     if getattr(spec, "needs_data", True) and df is not None:
         parts.append(df_to_r(canon_df(df, spec)))

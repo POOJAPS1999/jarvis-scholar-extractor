@@ -940,3 +940,435 @@ register(TestSpec("permutation", "Permutation test", "12. Resampling",
     [Column("Group", "text", True, "Two-group label"), Column("Value", "number", True, "Numeric outcome")],
     {"Group": ["A"]*6 + ["B"]*6, "Value": [12,15,14,18,13,16, 20,22,19,24,21,23]},
     run_permutation))
+
+
+# ===========================================================================
+# PHASE B/C — extended tests
+# ===========================================================================
+def _kappa_mag(k):
+    return ("poor" if k < .2 else "fair" if k < .4 else "moderate" if k < .6
+            else "substantial" if k < .8 else "almost perfect")
+
+def _xcols(df, prefix="x"):
+    return [c for c in df.columns if str(c).strip().lower().startswith(prefix)]
+
+# --- 1. Descriptive: CI for a mean ---
+def run_ci_mean(df, params=None):
+    from scipy import stats
+    v = _num(_col(df, "Value")).dropna().values; n = len(v)
+    m = v.mean(); sd = v.std(ddof=1); se = sd/np.sqrt(n); t = stats.t.ppf(.975, n-1)
+    lo, hi = m-t*se, m+t*se
+    tab = pd.DataFrame({"n": [n], "Mean": [round(m, 4)], "SD": [round(sd, 4)],
+                        "SE": [round(se, 4)], "95% CI": [f"[{lo:.4f}, {hi:.4f}]"]})
+    return StatResult(f"Mean = {m:.3f}, 95% CI [{lo:.3f}, {hi:.3f}] (n = {n})", tab,
+                      interpretation=f"95% confident the population mean lies between {lo:.3f} and {hi:.3f}.")
+register(TestSpec("ci_mean", "Confidence interval (mean)", "1. Descriptive",
+    "95% confidence interval for a mean.",
+    [Column("Value", "number", True, "Numeric values")],
+    {"Value": [12, 14, 13, 15, 11, 16, 12, 14, 13, 15]}, run_ci_mean))
+
+# --- 2. Assumption: KS / Anderson + skew/kurtosis ---
+def run_normality_more(df, params=None):
+    from scipy import stats
+    v = _num(_col(df, "Value")).dropna().values
+    ks = stats.kstest((v-v.mean())/v.std(ddof=1), "norm"); ad = stats.anderson(v, "norm")
+    sk = stats.skew(v); ku = stats.kurtosis(v); ad_sig = ad.statistic > ad.critical_values[2]
+    tab = pd.DataFrame({"Test": ["Kolmogorov–Smirnov", "Anderson–Darling", "Skewness", "Kurtosis (excess)"],
+                        "Statistic": [round(ks.statistic, 4), round(ad.statistic, 4), round(sk, 3), round(ku, 3)],
+                        "p / crit": [f"{ks.pvalue:.4f}", f"crit(5%)={ad.critical_values[2]:.3f}", "", ""]})
+    return StatResult(f"KS p = {ks.pvalue:.3f}; Anderson–Darling A² = {ad.statistic:.3f} "
+                      f"({'non-normal' if ad_sig else 'normal'} at 5%)", tab,
+                      interpretation=("Distribution deviates from normal." if (ks.pvalue < .05 or ad_sig)
+                                      else "Consistent with a normal distribution."),
+                      assumptions=[f"Skewness {sk:.2f}, excess kurtosis {ku:.2f} (≈0 = normal-ish)."])
+register(TestSpec("normality_more", "Normality (KS / Anderson–Darling)", "2. Assumption checks",
+    "K–S and Anderson–Darling normality tests plus skewness/kurtosis.",
+    [Column("Value", "number", True, "Numeric values")],
+    {"Value": [12, 14, 13, 15, 11, 16, 12, 14, 13, 15, 10, 17]}, run_normality_more))
+
+def run_bartlett(df, params=None):
+    from scipy import stats
+    g = _col(df, "Group").astype(str); v = _num(_col(df, "Value")); d = pd.DataFrame({"g": g, "v": v}).dropna()
+    arrays = [d[d.g == gr]["v"].values for gr in pd.unique(d.g)]
+    T, p = stats.bartlett(*arrays)
+    return StatResult(f"Bartlett's test: T = {T:.2f}, {fmt_p(p)}",
+                      pd.DataFrame({"Statistic": [round(T, 3)], "p": [round(p, 4)]}),
+                      interpretation=("Variances differ across groups." if p < .05 else "Equal variances."),
+                      caveats=["Bartlett is sensitive to non-normality — prefer Levene if data are skewed."])
+register(TestSpec("bartlett", "Equal variances (Bartlett)", "2. Assumption checks",
+    "Bartlett test for equal variances.",
+    [Column("Group", "text", True, "Group"), Column("Value", "number", True, "Outcome")],
+    {"Group": ["A"]*5 + ["B"]*5, "Value": [12, 14, 13, 15, 11, 20, 25, 19, 30, 22]}, run_bartlett))
+
+# --- 3. Effect size ---
+def run_effect_size(df, params=None):
+    import pingouin as pg
+    g = _col(df, "Group").astype(str); v = _num(_col(df, "Value")); d = pd.DataFrame({"g": g, "v": v}).dropna()
+    grs = list(pd.unique(d.g))[:2]; a = d[d.g == grs[0]]["v"].values; b = d[d.g == grs[1]]["v"].values
+    dd = cohen_d(a, b); n1, n2 = len(a), len(b); J = 1 - 3/(4*(n1+n2)-9); g_h = dd*J
+    ci = pg.compute_esci(stat=dd, nx=n1, ny=n2, eftype="cohen")
+    tab = pd.DataFrame({"Metric": ["Cohen's d", "Hedges' g", "95% CI (d)"],
+                        "Value": [round(dd, 3), round(g_h, 3), f"[{ci[0]:.3f}, {ci[1]:.3f}]"]})
+    return StatResult(f"Cohen's d = {dd:.3f} ({d_magnitude(dd)}), Hedges' g = {g_h:.3f}", tab,
+                      interpretation=f"Standardized mean difference between {grs[0]} and {grs[1]} is {d_magnitude(dd)}.")
+register(TestSpec("effect_size", "Effect size (Cohen's d / Hedges' g)", "3. Two-group comparison",
+    "Standardized mean-difference effect size with 95% CI.",
+    [Column("Group", "text", True, "Group (2 levels)"), Column("Value", "number", True, "Outcome")],
+    {"Group": ["A"]*6 + ["B"]*6, "Value": [12, 14, 13, 15, 11, 16, 18, 20, 19, 21, 17, 22]}, run_effect_size))
+
+# --- 4. Three+ groups: Games-Howell, two-way, ANCOVA ---
+def run_games_howell(df, params=None):
+    import pingouin as pg
+    g = _col(df, "Group").astype(str); v = _num(_col(df, "Value")); d = pd.DataFrame({"g": g, "v": v}).dropna()
+    gh = pg.pairwise_gameshowell(dv="v", between="g", data=d).round(4)
+    return StatResult("Games–Howell post-hoc (unequal variances)", gh,
+                      interpretation="Pairwise comparisons robust to unequal variances/sample sizes; see 'pval'.")
+register(TestSpec("games_howell", "Games–Howell post-hoc", "4. Three+ groups",
+    "Post-hoc pairwise comparisons that don't assume equal variances.",
+    [Column("Group", "text", True, "Group"), Column("Value", "number", True, "Outcome")],
+    {"Group": ["A"]*5 + ["B"]*5 + ["C"]*5, "Value": [12,14,13,15,11, 18,25,19,30,22, 9,11,10,12,8]}, run_games_howell))
+
+def run_anova_two(df, params=None):
+    import pingouin as pg
+    d = pd.DataFrame({"F1": _col(df, "Factor1").astype(str), "F2": _col(df, "Factor2").astype(str),
+                      "v": _num(_col(df, "Value"))}).dropna()
+    aov = pg.anova(dv="v", between=["F1", "F2"], data=d, detailed=True).round(4)
+    return StatResult("Two-way / factorial ANOVA (main effects + interaction)", aov,
+                      interpretation="Check each Source's p-value; the 'F1 * F2' row is the interaction.",
+                      figure_png=_group_fig(d.assign(cell=d.F1 + "×" + d.F2), "cell", "v", "Cell means"))
+register(TestSpec("anova_two", "Two-way / factorial ANOVA", "4. Three+ groups",
+    "Two factors plus their interaction.",
+    [Column("Factor1", "text", True, "Factor A"), Column("Factor2", "text", True, "Factor B"),
+     Column("Value", "number", True, "Outcome")],
+    {"Factor1": ["A", "A", "B", "B"]*3, "Factor2": ["X", "Y", "X", "Y"]*3,
+     "Value": [10, 12, 14, 18, 11, 13, 15, 19, 9, 12, 14, 17]}, run_anova_two))
+
+def run_ancova(df, params=None):
+    import pingouin as pg
+    d = pd.DataFrame({"g": _col(df, "Group").astype(str), "cov": _num(_col(df, "Covariate")),
+                      "v": _num(_col(df, "Value"))}).dropna()
+    aov = pg.ancova(data=d, dv="v", covar="cov", between="g").round(4)
+    return StatResult("ANCOVA (group effect adjusted for covariate)", aov,
+                      interpretation="The group row's p-value tests differences after adjusting for the covariate.")
+register(TestSpec("ancova", "ANCOVA", "4. Three+ groups", "Group means adjusted for a covariate.",
+    [Column("Group", "text", True, "Group"), Column("Covariate", "number", True, "Covariate"),
+     Column("Value", "number", True, "Outcome")],
+    {"Group": ["A"]*5 + ["B"]*5, "Covariate": [1, 2, 3, 4, 5, 1, 2, 3, 4, 5],
+     "Value": [10, 12, 13, 15, 17, 14, 15, 17, 19, 21]}, run_ancova))
+
+# --- 5. Repeated-measures ANOVA ---
+def run_rm_anova(df, params=None):
+    import pingouin as pg
+    d = pd.DataFrame({"s": _col(df, "Subject").astype(str), "c": _col(df, "Condition").astype(str),
+                      "v": _num(_col(df, "Value"))}).dropna()
+    aov = pg.rm_anova(dv="v", within="c", subject="s", data=d, detailed=True).round(4)
+    return StatResult("Repeated-measures ANOVA", aov,
+                      interpretation="Tests whether within-subject condition means differ (Condition row).")
+register(TestSpec("rm_anova", "Repeated-measures ANOVA", "5. Paired / repeated",
+    "≥3 within-subject conditions.",
+    [Column("Subject", "text", True, "Subject ID"), Column("Condition", "text", True, "Within condition"),
+     Column("Value", "number", True, "Outcome")],
+    {"Subject": ["s1", "s2", "s3", "s4"]*3, "Condition": ["T1"]*4 + ["T2"]*4 + ["T3"]*4,
+     "Value": [10, 11, 9, 12, 14, 15, 13, 16, 18, 19, 17, 20]}, run_rm_anova))
+
+# --- 6. Categorical: McNemar, Cochran's Q ---
+def run_mcnemar(df, params=None):
+    from statsmodels.stats.contingency_tables import mcnemar
+    d = pd.DataFrame({"a": _col(df, "Before").astype(str), "b": _col(df, "After").astype(str)}).dropna()
+    tab = pd.crosstab(d.a, d.b); res = mcnemar(tab.values, exact=True)
+    return StatResult(f"McNemar's test: statistic = {res.statistic:.3f}, {fmt_p(res.pvalue)}",
+                      tab.reset_index(),
+                      interpretation=("Significant change between paired measurements." if res.pvalue < .05
+                                      else "No significant change between paired measurements."))
+register(TestSpec("mcnemar", "McNemar (paired 2×2)", "6. Categorical", "Paired binary before/after.",
+    [Column("Before", "text", True, "Before (e.g. Pos/Neg)"), Column("After", "text", True, "After")],
+    {"Before": ["Pos", "Pos", "Neg", "Neg", "Pos", "Neg", "Pos", "Neg"],
+     "After": ["Pos", "Neg", "Pos", "Neg", "Neg", "Neg", "Pos", "Pos"]}, run_mcnemar))
+
+def run_cochran_q(df, params=None):
+    from statsmodels.stats.contingency_tables import cochrans_q
+    d = pd.DataFrame({"s": _col(df, "Subject").astype(str), "c": _col(df, "Condition").astype(str),
+                      "o": _num(_col(df, "Outcome"))}).dropna()
+    wide = d.pivot_table(index="s", columns="c", values="o", aggfunc="first")
+    res = cochrans_q(wide.values)
+    return StatResult(f"Cochran's Q = {res.statistic:.3f}, {fmt_p(res.pvalue)}", wide.reset_index(),
+                      interpretation=("Proportion of the binary outcome differs across conditions." if res.pvalue < .05
+                                      else "No difference across conditions."))
+register(TestSpec("cochran_q", "Cochran's Q", "6. Categorical",
+    "Paired binary outcome across ≥3 conditions.",
+    [Column("Subject", "text", True, "Subject"), Column("Condition", "text", True, "Condition"),
+     Column("Outcome", "int", True, "0/1 outcome")],
+    {"Subject": ["s1", "s2", "s3", "s4"]*3, "Condition": ["C1"]*4 + ["C2"]*4 + ["C3"]*4,
+     "Outcome": [1, 0, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0]}, run_cochran_q))
+
+# --- 7. Correlation: point-biserial, partial ---
+def run_pointbiserial(df, params=None):
+    from scipy import stats
+    d = pd.DataFrame({"b": _num(_col(df, "Binary")), "v": _num(_col(df, "Value"))}).dropna()
+    r, p = stats.pointbiserialr(d.b, d.v)
+    return StatResult(f"Point-biserial r = {r:.3f}, {fmt_p(p)}",
+                      pd.DataFrame({"r_pb": [round(r, 3)], "p": [round(p, 4)]}),
+                      interpretation=f"Binary–continuous association is {'significant' if p < .05 else 'not significant'} (r = {r:.2f}).")
+register(TestSpec("pointbiserial", "Point-biserial correlation", "7. Correlation",
+    "Correlation between a binary and a continuous variable.",
+    [Column("Binary", "int", True, "0/1"), Column("Value", "number", True, "Continuous")],
+    {"Binary": [0, 0, 0, 1, 1, 1, 0, 1, 0, 1], "Value": [10, 12, 11, 18, 20, 19, 13, 17, 12, 21]}, run_pointbiserial))
+
+def run_partial_corr(df, params=None):
+    import pingouin as pg
+    d = pd.DataFrame({"X": _num(_col(df, "X")), "Y": _num(_col(df, "Y")),
+                      "Covariate": _num(_col(df, "Covariate"))}).dropna()
+    pc = pg.partial_corr(data=d, x="X", y="Y", covar="Covariate").round(4)
+    r = pc["r"].iloc[0]; p = pc["p-val"].iloc[0] if "p-val" in pc.columns else pc.iloc[0, -1]
+    return StatResult(f"Partial correlation r = {r:.3f}, {fmt_p(p)} (controlling for covariate)", pc,
+                      interpretation=f"X–Y association after removing the covariate is {'significant' if p < .05 else 'not significant'}.")
+register(TestSpec("partial_corr", "Partial correlation", "7. Correlation",
+    "Correlation between X and Y controlling for a covariate.",
+    [Column("X", "number", True, "X"), Column("Y", "number", True, "Y"),
+     Column("Covariate", "number", True, "Control variable")],
+    {"X": [1, 2, 3, 4, 5, 6, 7, 8], "Y": [2, 4, 5, 4, 5, 7, 8, 9], "Covariate": [1, 1, 2, 2, 3, 3, 4, 4]},
+    run_partial_corr))
+
+# --- 8. Regression: diagnostics, Poisson ---
+def run_reg_diagnostics(df, params=None):
+    import statsmodels.api as sm
+    from statsmodels.stats.outliers_influence import variance_inflation_factor
+    from statsmodels.stats.stattools import durbin_watson
+    xc = _xcols(df); X = df[xc].apply(_num)
+    d = pd.concat([_num(_col(df, "Y")).rename("Y"), X], axis=1).dropna()
+    Xd = sm.add_constant(d[xc]); model = sm.OLS(d["Y"], Xd).fit()
+    vif = pd.DataFrame({"Term": xc, "VIF": [round(variance_inflation_factor(Xd.values, i+1), 3) for i in range(len(xc))]})
+    return StatResult(f"R² = {model.rsquared:.3f}, adj R² = {model.rsquared_adj:.3f}, F p = {model.f_pvalue:.3g}", vif,
+                      interpretation=f"Model explains {model.rsquared:.0%} of variance. VIF > 5–10 flags multicollinearity.",
+                      assumptions=[f"Durbin–Watson = {durbin_watson(model.resid):.2f} (≈2 = no autocorrelation)."])
+register(TestSpec("reg_diagnostics", "Regression diagnostics (R²/VIF)", "8. Regression",
+    "Model fit + multicollinearity (VIF) for a multiple regression.",
+    [Column("Y", "number", True, "Outcome"), Column("X1", "number", True, "Predictor 1"),
+     Column("X2", "number", False, "Predictor 2")],
+    {"Y": [10, 12, 13, 16, 18, 20], "X1": [1, 2, 3, 4, 5, 6], "X2": [2, 1, 4, 3, 6, 5]}, run_reg_diagnostics))
+
+def run_poisson(df, params=None):
+    import statsmodels.api as sm
+    xc = _xcols(df); X = df[xc].apply(_num)
+    d = pd.concat([_num(_col(df, "Count")).rename("Count"), X], axis=1).dropna()
+    Xd = sm.add_constant(d[xc]); model = sm.GLM(d["Count"], Xd, family=sm.families.Poisson()).fit()
+    tab = pd.DataFrame({"Term": ["const"] + xc, "Coef": model.params.round(4).values,
+                        "IRR": np.exp(model.params).round(3).values, "p": model.pvalues.round(4).values})
+    return StatResult(f"Poisson regression (deviance = {model.deviance:.1f})", tab,
+                      interpretation="IRR = incidence-rate ratio (exp of coef). p<.05 = significant predictor.",
+                      caveats=["If variance ≫ mean (overdispersion), use negative binomial instead."])
+register(TestSpec("poisson", "Poisson regression", "8. Regression", "Count-outcome regression (IRR).",
+    [Column("Count", "int", True, "Count outcome"), Column("X1", "number", True, "Predictor")],
+    {"Count": [1, 2, 1, 3, 4, 6, 5, 8], "X1": [1, 2, 3, 4, 5, 6, 7, 8]}, run_poisson))
+
+# --- 9. Reliability: Fleiss' kappa ---
+def run_fleiss(df, params=None):
+    from statsmodels.stats.inter_rater import fleiss_kappa, aggregate_raters
+    num = df.apply(_num).dropna(axis=1, how="all"); mat = num.dropna().astype(int).values
+    agg, cats = aggregate_raters(mat); kappa = fleiss_kappa(agg)
+    return StatResult(f"Fleiss' κ = {kappa:.3f} ({_kappa_mag(kappa)})",
+                      pd.DataFrame({"Fleiss kappa": [round(kappa, 3)], "Subjects": [mat.shape[0]], "Raters": [mat.shape[1]]}),
+                      interpretation="Agreement among ≥3 raters: <.2 poor, .2–.4 fair, .4–.6 moderate, .6–.8 substantial, >.8 almost perfect.")
+register(TestSpec("fleiss", "Fleiss' kappa", "9. Reliability",
+    "Agreement among ≥3 raters (each column = a rater, values = category codes).",
+    [Column("Rater1", "int", True, "Rater 1 category"), Column("Rater2", "int", True, "Rater 2"),
+     Column("Rater3", "int", True, "Rater 3")],
+    {"Rater1": [1, 2, 3, 1, 2], "Rater2": [1, 2, 3, 1, 3], "Rater3": [1, 2, 2, 1, 2]}, run_fleiss))
+
+# --- 11. Power: ANOVA / proportions / correlation ---
+def run_power_anova(df, params=None):
+    from statsmodels.stats.power import FTestAnovaPower
+    p = params or {}; k = int(p.get("groups", 3) or 3); f = float(p.get("effect_f", 0.25) or 0.25)
+    alpha = float(p.get("alpha", .05) or .05); power = float(p.get("power", .8) or .8)
+    n = FTestAnovaPower().solve_power(effect_size=f, k_groups=k, alpha=alpha, power=power)
+    nper = int(np.ceil(n))
+    return StatResult(f"One-way ANOVA: need n ≈ {nper} per group ({nper*k} total)",
+                      pd.DataFrame({"Groups": [k], "Effect f": [f], "Alpha": [alpha], "Power": [power],
+                                    "n per group": [nper], "Total N": [nper*k]}),
+                      interpretation="Sample size to detect effect size f (0.1 small, 0.25 medium, 0.4 large).")
+register(TestSpec("power_anova", "Power / sample size (ANOVA)", "11. Power",
+    "Sample size for a one-way ANOVA.", [], {}, run_power_anova, needs_data=False,
+    params=[Param("groups", "int", 3, help="Number of groups"), Param("effect_f", "number", 0.25, help="Cohen's f"),
+            Param("alpha", "number", 0.05), Param("power", "number", 0.8)]))
+
+def run_power_prop(df, params=None):
+    from statsmodels.stats.power import NormalIndPower
+    from statsmodels.stats.proportion import proportion_effectsize
+    p = params or {}; p1 = float(p.get("p1", .5) or .5); p2 = float(p.get("p2", .65) or .65)
+    alpha = float(p.get("alpha", .05) or .05); power = float(p.get("power", .8) or .8)
+    es = proportion_effectsize(p1, p2)
+    n = NormalIndPower().solve_power(effect_size=abs(es), alpha=alpha, power=power, ratio=1, alternative="two-sided")
+    nper = int(np.ceil(n))
+    return StatResult(f"Two proportions: need n ≈ {nper} per group",
+                      pd.DataFrame({"p1": [p1], "p2": [p2], "Alpha": [alpha], "Power": [power], "n per group": [nper]}),
+                      interpretation="Sample size to detect a difference between two proportions.")
+register(TestSpec("power_prop", "Power / sample size (proportions)", "11. Power",
+    "Sample size to compare two proportions.", [], {}, run_power_prop, needs_data=False,
+    params=[Param("p1", "number", 0.5, help="Proportion group 1"), Param("p2", "number", 0.65, help="Proportion group 2"),
+            Param("alpha", "number", 0.05), Param("power", "number", 0.8)]))
+
+def run_power_corr(df, params=None):
+    import pingouin as pg
+    p = params or {}; r = float(p.get("r", 0.3) or 0.3); alpha = float(p.get("alpha", .05) or .05)
+    power = float(p.get("power", .8) or .8)
+    n = pg.power_corr(r=r, power=power, alpha=alpha); nn = int(np.ceil(n))
+    return StatResult(f"Correlation: need n ≈ {nn}",
+                      pd.DataFrame({"r": [r], "Alpha": [alpha], "Power": [power], "n": [nn]}),
+                      interpretation="Sample size to detect a correlation of r.")
+register(TestSpec("power_corr", "Power / sample size (correlation)", "11. Power",
+    "Sample size to detect a correlation.", [], {}, run_power_corr, needs_data=False,
+    params=[Param("r", "number", 0.3, help="Expected correlation"), Param("alpha", "number", 0.05),
+            Param("power", "number", 0.8)]))
+
+# --- 13. Survival: Kaplan–Meier (+ log-rank), Cox ---
+def run_km(df, params=None):
+    from lifelines import KaplanMeierFitter
+    from lifelines.statistics import multivariate_logrank_test
+    gc = _col(df, "Group")
+    d = pd.DataFrame({"t": _num(_col(df, "Time")), "e": _num(_col(df, "Event"))})
+    if gc is not None:
+        d["g"] = gc.astype(str)
+    d = d.dropna()
+    has_g = "g" in d.columns and d["g"].nunique() > 1
+    def build(fig, ax, opt):
+        kmf = KaplanMeierFitter()
+        if has_g:
+            for gr in pd.unique(d.g):
+                m = d.g == gr; kmf.fit(d.t[m], d.e[m], label=str(gr)); kmf.plot_survival_function(ax=ax, ci_show=True)
+        else:
+            kmf.fit(d.t, d.e, label="All"); kmf.plot_survival_function(ax=ax)
+        ax.set_xlabel("Time"); ax.set_ylabel("Survival probability"); ax.set_ylim(0, 1.02)
+        ax.set_title("Kaplan–Meier", fontsize=12, fontweight="bold", color="#12283b")
+    png = _fig_from(build, PlotOptions(figsize=(7, 4.6), dpi=160))
+    kmf = KaplanMeierFitter(); rows = []
+    if has_g:
+        for gr in pd.unique(d.g):
+            m = d.g == gr; kmf.fit(d.t[m], d.e[m])
+            rows.append({"Group": gr, "n": int(m.sum()), "Events": int(d.e[m].sum()),
+                         "Median survival": kmf.median_survival_time_})
+        lr = multivariate_logrank_test(d.t, d.g, d.e)
+        head = f"Log-rank χ² = {lr.test_statistic:.2f}, {fmt_p(lr.p_value)}"
+        interp = ("Survival differs between groups." if lr.p_value < .05 else "No significant survival difference.")
+    else:
+        kmf.fit(d.t, d.e); rows.append({"Group": "All", "n": len(d), "Events": int(d.e.sum()),
+                                        "Median survival": kmf.median_survival_time_})
+        head = "Kaplan–Meier survival estimate"; interp = "Median survival shown in the table."
+    return StatResult(head, pd.DataFrame(rows), interpretation=interp, figure_png=png)
+register(TestSpec("kaplan_meier", "Kaplan–Meier (+ log-rank)", "13. Survival",
+    "Time-to-event survival curves; add a Group column for a log-rank comparison.",
+    [Column("Time", "number", True, "Follow-up time"), Column("Event", "int", True, "1=event, 0=censored"),
+     Column("Group", "text", False, "Group (optional)")],
+    {"Time": [5, 6, 6, 8, 10, 12, 3, 4, 7, 9, 11, 14], "Event": [1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1],
+     "Group": ["A"]*6 + ["B"]*6}, run_km))
+
+def run_cox(df, params=None):
+    from lifelines import CoxPHFitter
+    xc = _xcols(df); d = df[["Time", "Event"] + xc].copy()
+    d["Time"] = _num(_col(df, "Time")); d["Event"] = _num(_col(df, "Event"))
+    for c in xc:
+        d[c] = _num(df[c])
+    d = d.dropna()
+    cph = CoxPHFitter().fit(d, duration_col="Time", event_col="Event")
+    s = cph.summary
+    tab = pd.DataFrame({"Term": s.index, "HR": s["exp(coef)"].round(3).values,
+                        "95% CI": [f"[{np.exp(lo):.2f}, {np.exp(hi):.2f}]"
+                                   for lo, hi in zip(s["coef lower 95%"], s["coef upper 95%"])],
+                        "p": s["p"].round(4).values})
+    return StatResult(f"Cox PH: concordance = {cph.concordance_index_:.3f}", tab,
+                      interpretation="HR>1 = higher hazard (worse survival). p<.05 = significant predictor.",
+                      caveats=["Assumes proportional hazards — verify (e.g. lifelines check_assumptions)."])
+register(TestSpec("cox_ph", "Cox proportional hazards (+HR)", "13. Survival",
+    "Multivariable survival regression → hazard ratios.",
+    [Column("Time", "number", True, "Follow-up time"), Column("Event", "int", True, "1=event, 0=censored"),
+     Column("X1", "number", True, "Predictor 1"), Column("X2", "number", False, "Predictor 2")],
+    {"Time": [5, 6, 6, 8, 10, 12, 3, 4, 7, 9, 11, 14], "Event": [1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1],
+     "X1": [1, 2, 1, 3, 2, 4, 1, 2, 3, 2, 4, 5], "X2": [50, 60, 55, 65, 70, 62, 48, 52, 58, 63, 66, 70]}, run_cox))
+
+# --- 14. Multivariate: PCA, k-means, LDA, MANOVA ---
+def run_pca(df, params=None):
+    from sklearn.decomposition import PCA
+    from sklearn.preprocessing import StandardScaler
+    xc = _xcols(df) or [c for c in df.columns if _num(df[c]).notna().any()]
+    X = df[xc].apply(_num).dropna(); Xs = StandardScaler().fit_transform(X)
+    pca = PCA(n_components=min(len(xc), 5)).fit(Xs); evr = pca.explained_variance_ratio_
+    tab = pd.DataFrame({"Component": [f"PC{i+1}" for i in range(len(evr))],
+                        "Explained variance %": (evr*100).round(2), "Cumulative %": (np.cumsum(evr)*100).round(2)})
+    png = None
+    if len(evr) >= 2:
+        sc = pca.transform(Xs)
+        def build(fig, ax, opt):
+            ax.scatter(sc[:, 0], sc[:, 1], s=42, color=palette(opt)[0], alpha=0.75, edgecolor="white")
+            ax.set_xlabel(f"PC1 ({evr[0]*100:.1f}%)"); ax.set_ylabel(f"PC2 ({evr[1]*100:.1f}%)")
+            ax.set_title("PCA", fontsize=12, fontweight="bold", color="#12283b")
+        png = _fig_from(build)
+    return StatResult(f"PCA: PC1 explains {evr[0]*100:.1f}%" + (f", PC2 {evr[1]*100:.1f}%" if len(evr) > 1 else ""),
+                      tab, interpretation="Components ordered by variance explained; use cumulative % to choose how many to keep.",
+                      figure_png=png)
+register(TestSpec("pca", "PCA", "14. Multivariate", "Principal component analysis of several numeric variables.",
+    [Column("X1", "number", True, "Variable 1"), Column("X2", "number", True, "Variable 2"),
+     Column("X3", "number", False, "Variable 3")],
+    {"X1": [1, 2, 3, 4, 5, 6], "X2": [2, 1, 4, 3, 6, 5], "X3": [5, 3, 6, 2, 8, 4]}, run_pca))
+
+def run_kmeans(df, params=None):
+    from sklearn.cluster import KMeans
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.metrics import silhouette_score
+    k = int((params or {}).get("k", 3) or 3)
+    xc = _xcols(df) or [c for c in df.columns if _num(df[c]).notna().any()]
+    X = df[xc].apply(_num).dropna().reset_index(drop=True); Xs = StandardScaler().fit_transform(X)
+    km = KMeans(n_clusters=k, n_init=10, random_state=0).fit(Xs)
+    sil = silhouette_score(Xs, km.labels_) if (k > 1 and len(X) > k) else np.nan
+    counts = pd.Series(km.labels_).value_counts().sort_index()
+    tab = pd.DataFrame({"Cluster": counts.index, "n": counts.values})
+    png = None
+    if X.shape[1] >= 2:
+        c0, c1 = X.columns[0], X.columns[1]
+        def build(fig, ax, opt):
+            for c in sorted(set(km.labels_)):
+                m = km.labels_ == c
+                ax.scatter(X.loc[m, c0], X.loc[m, c1], s=42, color=palette(opt)[c % 8], alpha=0.75,
+                           edgecolor="white", label=f"C{c}")
+            ax.set_xlabel(str(c0)); ax.set_ylabel(str(c1)); ax.legend(fontsize=8)
+            ax.set_title("k-means clusters", fontsize=12, fontweight="bold", color="#12283b")
+        png = _fig_from(build)
+    head = f"k-means (k={k}): silhouette = {sil:.3f}" if not np.isnan(sil) else f"k-means (k={k})"
+    return StatResult(head, tab, interpretation="Higher silhouette (−1..1) = better-separated clusters.",
+                      figure_png=png)
+register(TestSpec("kmeans", "k-means clustering", "14. Multivariate", "Partition cases into k clusters.",
+    [Column("X1", "number", True, "Variable 1"), Column("X2", "number", True, "Variable 2")],
+    {"X1": [1, 1.2, 5, 5.2, 9, 9.1], "X2": [1, 0.9, 5, 5.1, 9, 8.9]}, run_kmeans,
+    params=[Param("k", "int", 3, help="Number of clusters")]))
+
+def run_lda(df, params=None):
+    from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+    xc = _xcols(df); X = df[xc].apply(_num)
+    d = pd.concat([_col(df, "Group").astype(str).rename("g"), X], axis=1).dropna()
+    lda = LinearDiscriminantAnalysis().fit(d[xc], d["g"]); acc = lda.score(d[xc], d["g"])
+    tab = pd.DataFrame({"Group": lda.classes_, "n": [int((d.g == c).sum()) for c in lda.classes_]})
+    return StatResult(f"LDA: resubstitution accuracy = {acc:.1%}", tab,
+                      interpretation="Linear discriminant analysis classifies cases into the known groups.",
+                      caveats=["Accuracy is on training data — validate on held-out data for honest performance."])
+register(TestSpec("lda", "Linear discriminant analysis", "14. Multivariate", "Classify cases into known groups.",
+    [Column("Group", "text", True, "Known group"), Column("X1", "number", True, "Predictor 1"),
+     Column("X2", "number", False, "Predictor 2")],
+    {"Group": ["A", "A", "A", "B", "B", "B"], "X1": [1, 2, 1.5, 5, 6, 5.5], "X2": [2, 1, 2.5, 6, 5, 6.5]}, run_lda))
+
+def run_manova(df, params=None):
+    from statsmodels.multivariate.manova import MANOVA
+    yc = [c for c in df.columns if str(c).strip().lower().startswith("y")]
+    d = df[["Group"] + yc].copy(); d["Group"] = _col(df, "Group").astype(str)
+    for c in yc:
+        d[c] = _num(df[c])
+    d = d.dropna()
+    m = MANOVA.from_formula(" + ".join(yc) + " ~ Group", data=d); r = m.mv_test()
+    stat = r.results["Group"]["stat"].round(4)
+    wp = stat.loc["Wilks' lambda", "Pr > F"]
+    return StatResult(f"MANOVA (Wilks' λ): {fmt_p(wp)}", stat.reset_index(),
+                      interpretation=("Groups differ on the combined outcomes." if wp < .05
+                                      else "No multivariate group difference."))
+register(TestSpec("manova", "MANOVA", "14. Multivariate", "Compare groups on several outcomes jointly.",
+    [Column("Group", "text", True, "Group"), Column("Y1", "number", True, "Outcome 1"),
+     Column("Y2", "number", True, "Outcome 2")],
+    {"Group": ["A", "A", "A", "A", "A", "B", "B", "B", "B", "B"],
+     "Y1": [10, 12, 11, 13, 9, 18, 20, 19, 21, 17], "Y2": [5, 4, 6, 5, 7, 9, 11, 8, 10, 12]},
+    run_manova))
